@@ -100,18 +100,10 @@
     </div>
   </header>
 
-  <div class="wrap boxes-stack">
-
-  <details class="section-box" id="about">
-    <summary>
-      <span class="summary-left">
-        <span class="section-tag">01</span><h2>About</h2>
-        <span class="summary-teaser">Nottingham Malaysia · POMI internship · Gulf-bound</span>
-      </span>
-      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-    </summary>
-    <div class="section-body about-grid">
+  <section id="about">
+    <div class="wrap about-grid">
       <div>
+        <div class="section-head"><span class="section-tag">01</span><h2>About</h2></div>
         <p>I am completing my degree in Electrical and Electronic Engineering at the University of Nottingham Malaysia, with a growing focus on power systems, protection, and control. I'm currently on an internship at POMI, a power generation facility in East Java.</p>
         <p>Malaysia remains home base. Longer term, I'm building toward the Gulf's oil &amp; gas and EPC sector, where DCS, SCADA, and protection experience are the differentiators that matter.</p>
       </div>
@@ -126,50 +118,40 @@
         </dl>
       </div>
     </div>
-  </details>
+  </section>
 
-  <details class="section-box" id="experience">
-    <summary>
-      <span class="summary-left">
-        <span class="section-tag">02</span><h2>Experience</h2>
-        <span class="summary-teaser">POMI internship · relay platforms · DCS</span>
-      </span>
-      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-    </summary>
-    <div class="section-body exp-grid">
-      <div class="exp-card reveal">
-        <span class="num">1</span>
-        <h3>Internship</h3>
-        <p>POMI — Paiton Operations &amp; Maintenance Indonesia</p>
-        <p>June 2026 – Present</p>
-        <p>In POMI, I have learned about relay platforms and DCS systems spanning both motor management and transformer/feeder protection — building technical presentations and working with cutting-edge power systems.</p>
-      </div>
-      <div class="relay-row">
-        <div class="relay-card reveal"><div class="model">GE 469</div><div class="role">Motor Management (legacy)</div></div>
-        <div class="relay-card reveal"><div class="model">GE 869</div><div class="role">Motor Management (current)</div></div>
-        <div class="relay-card reveal"><div class="model">GE 350</div><div class="role">Feeder Protection</div></div>
-        <div class="relay-card reveal"><div class="model">GE T60</div><div class="role">Transformer Protection</div></div>
-      </div>
-      <div class="dcs-row">
-        <span class="pill">Emerson Ovation (master DCS)</span>
-        <span class="pill">Mark VIe vE</span>
-        <span class="pill">FSSS — Allen-Bradley</span>
-        <span class="pill">Single-Line Diagrams</span>
-        <span class="pill">Switchgear &amp; Transformers</span>
+  <section id="experience">
+    <div class="wrap">
+      <div class="section-head"><span class="section-tag">02</span><h2>Experience</h2></div>
+      <div class="exp-grid">
+        <div class="exp-card reveal">
+          <span class="num">1</span>
+          <h3>Internship</h3>
+          <p>POMI — Paiton Operations &amp; Maintenance Indonesia</p>
+          <p>June 2026 – Present</p>
+          <p>In POMI, I have learned about relay platforms and DCS systems spanning both motor management and transformer/feeder protection — building technical presentations and working with cutting-edge power systems.</p>
+        </div>
+        <div class="relay-row">
+          <div class="relay-card reveal"><div class="model">GE 469</div><div class="role">Motor Management (legacy)</div></div>
+          <div class="relay-card reveal"><div class="model">GE 869</div><div class="role">Motor Management (current)</div></div>
+          <div class="relay-card reveal"><div class="model">GE 350</div><div class="role">Feeder Protection</div></div>
+          <div class="relay-card reveal"><div class="model">GE T60</div><div class="role">Transformer Protection</div></div>
+        </div>
+        <div class="dcs-row">
+          <span class="pill">Emerson Ovation (master DCS)</span>
+          <span class="pill">Mark VIe vE</span>
+          <span class="pill">FSSS — Allen-Bradley</span>
+          <span class="pill">Single-Line Diagrams</span>
+          <span class="pill">Switchgear &amp; Transformers</span>
+        </div>
       </div>
     </div>
-  </details>
+  </section>
 
-  <details class="section-box" id="projects">
-    <summary>
-      <span class="summary-left">
-        <span class="section-tag">03</span><h2>Projects</h2>
-        <span class="summary-teaser">Power electronics · solar PV · embedded systems</span>
-      </span>
-      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-    </summary>
-    <div class="section-body">
-      <div class="project-grid">
+  <section id="projects">
+    <div class="wrap">
+      <div class="section-head"><span class="section-tag">03</span><h2>Projects</h2></div>
+      <div class="project-grid">  
         <div class="project-card reveal">
           <span class="num">1</span>
           <h3>Isolated Two Switch Forward Converter</h3>
@@ -178,7 +160,7 @@
           <img src ="images/Closed Loop.jpeg" alt="Closed Loop Control" style="width:100%; border-radius:6px; margin-top:8px;"/>
           <p>Designed and built a prototype of a closed-loop isolated two switch forward converter as part of a Energy Design Group Project.</p>
           <div class="project-tags"><span class="tag-sm">Power Electronics</span><span class="tag-sm">Control Circuit</span></div>
-        </div>
+      </div>
         <div class="project-card reveal">
           <span class="num">2</span>
           <h3>Grid-Connected PV System Design</h3>
@@ -190,21 +172,15 @@
           <h3>Doppler Radar Speed Detection</h3>
           <p>Embedded system on an STM32 (comparator and ADC/FFT methods) communicating via RS485 to a Xilinx CoolRunner-II CPLD driving a 7-segment display.</p>
           <div class="project-tags"><span class="tag-sm">STM32</span><span class="tag-sm">CPLD</span><span class="tag-sm">Embedded Systems</span></div>
-        </div>
+        </div>        
       </div>
     </div>
-  </details>
+  </section>
 
-  <details class="section-box" id="education">
-    <summary>
-      <span class="summary-left">
-        <span class="section-tag">04</span><h2>Education</h2>
-        <span class="summary-teaser">MEng (Hons) EEE · Nottingham Malaysia</span>
-      </span>
-      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-    </summary>
-    <div class="section-body edu-block">
+  <section id="education">
+    <div class="wrap edu-block">
       <div>
+        <div class="section-head"><span class="section-tag">04</span><h2>Education</h2></div>
         <p style="color:var(--ink-soft); max-width:44ch;">MEng (Hons) Electrical &amp; Electronic Engineering, University of Nottingham Malaysia. Coursework spans machines, control theory, power electronics, communications, and embedded systems design.</p>
       </div>
       <div class="module-cloud">
@@ -219,18 +195,12 @@
         <span class="module-pill">Information and Systems</span>
       </div>
     </div>
-  </details>
+  </section>
 
-  <details class="section-box" id="organizations">
-    <summary>
-      <span class="summary-left">
-        <span class="section-tag">05</span><h2>Organizations</h2>
-        <span class="summary-teaser">Indonesian Society — Secretary</span>
-      </span>
-      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-    </summary>
-    <div class="section-body">
-      <div class="org-grid">
+  <section id="organizations">
+    <div class="wrap">
+      <div class="section-head"><span class="section-tag">05</span><h2>Organizations</h2></div>
+      <div class="org-grid">  
         <div class="org-card reveal">
           <span class="num">1</span>
           <h3>Indonesian Society Secretary - 2026/27</h3>
@@ -239,17 +209,11 @@
         </div>
       </div>
     </div>
-  </details>
-
-  <details class="section-box" id="sports">
-    <summary>
-      <span class="summary-left">
-        <span class="section-tag">06</span><h2>Sports &amp; Recreation</h2>
-        <span class="summary-teaser">Football · Futsal · Swimming · Gym</span>
-      </span>
-      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-    </summary>
-    <div class="section-body">
+  </section>
+      
+  <section id="sports">
+    <div class="wrap">
+      <div class="section-head"><span class="section-tag">06</span><h2>Sports &amp; Recreation</h2></div>
       <p class="sports-desc">Beyond engineering, I'm passionate about staying active and competitive. Sports have shaped my discipline and resilience — qualities that translate directly into technical problem-solving.</p>
       <div class="sport-grid">
         <div class="sport-card reveal"><div class="name">Football</div><div class="level">Competitive</div><div class="description">Actively competed in many sports events including prestigous SOP (Schools of Olympics) Qatar.</div></div>
@@ -258,17 +222,11 @@
         <div class="sport-card reveal"><div class="name">Gym Training</div><div class="level">Regular</div><div class="description">Strength and conditioning to maintain physical resilience for long technical problem-solving sessions.</div></div>
       </div>
     </div>
-  </details>
+  </section>
 
-  <details class="section-box" id="contact">
-    <summary>
-      <span class="summary-left">
-        <span class="section-tag">07</span><h2>Contact</h2>
-        <span class="summary-teaser">Email · LinkedIn · GitHub</span>
-      </span>
-      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-    </summary>
-    <div class="section-body">
+  <footer id="contact">
+    <div class="wrap">
+      <div class="section-head"><span class="section-tag">07</span><h2>Contact</h2></div>
       <p style="color:var(--ink-soft); max-width:50ch;">Open to conversations about internships, protection engineering, or the Gulf EPC path — reach out any time.</p>
       <div class="contact-row">
         <a href="mailto:hirzi.fdh@gmail.com">hirzi.fdh@gmail.com</a>
@@ -276,34 +234,20 @@
         <a href="#">GitHub ↗</a>
       </div>
     </div>
-  </details>
-
-  </div>
+  </footer>
 
 </main>
 
 <script>
-  // ---- Helper: open a details box (if it is one) and scroll to it ----
-  function openAndScroll(target){
-    if(!target) return;
-    if(target.tagName === 'DETAILS' && !target.open){ target.open = true; }
-    target.scrollIntoView({behavior:'smooth', block:'start'});
-  }
-
   // ---- SLD feeder nav clicks ----
   document.querySelectorAll('.feeder-group').forEach(function(g){
-    function go(){ openAndScroll(document.querySelector(g.getAttribute('data-target'))); }
+    function go(){
+      var target = document.querySelector(g.getAttribute('data-target'));
+      if(target){ target.scrollIntoView({behavior:'smooth', block:'start'}); }
+    }
     g.addEventListener('click', go);
     g.addEventListener('keydown', function(e){
       if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); go(); }
-    });
-  });
-
-  // ---- Top nav links: also open the matching box ----
-  document.querySelectorAll('.nav a[href^="#"]').forEach(function(a){
-    a.addEventListener('click', function(e){
-      var target = document.getElementById(a.getAttribute('href').slice(1));
-      if(target){ e.preventDefault(); openAndScroll(target); }
     });
   });
 
@@ -318,7 +262,7 @@
   window.addEventListener('scroll', updateProgress);
   updateProgress();
 
-  // ---- Scroll-triggered reveal animations (fires once a box is opened and its cards are visible) ----
+  // ---- Scroll-triggered reveal animations ----
   var revealObserver = new IntersectionObserver(function(entries){
     entries.forEach(function(entry){
       if(entry.isIntersecting){ entry.target.classList.add('is-visible'); }
@@ -326,22 +270,22 @@
   }, { threshold: 0.15 });
   document.querySelectorAll('.reveal').forEach(function(el){ revealObserver.observe(el); });
 
-  // ---- Active section highlighting in nav (tracks the summary headers, which are always visible) ----
+  // ---- Active section highlighting in nav ----
   var navLinks = {};
   document.querySelectorAll('.nav a[href^="#"]').forEach(function(a){
     navLinks[a.getAttribute('href').slice(1)] = a;
   });
   var sectionObserver = new IntersectionObserver(function(entries){
     entries.forEach(function(entry){
-      var details = entry.target.closest('details[id]');
-      if(!details || !navLinks[details.id]) return;
+      var id = entry.target.id;
+      if(!navLinks[id]) return;
       if(entry.isIntersecting){
         Object.keys(navLinks).forEach(function(key){ navLinks[key].classList.remove('active'); });
-        navLinks[details.id].classList.add('active');
+        navLinks[id].classList.add('active');
       }
     });
   }, { threshold: 0.35, rootMargin: '-56px 0px -35% 0px' });
-  document.querySelectorAll('.boxes-stack > details[id] > summary').forEach(function(s){
+  document.querySelectorAll('main section[id], footer[id]').forEach(function(s){
     sectionObserver.observe(s);
   });
 
