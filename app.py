@@ -272,8 +272,8 @@ PRESETS = {
         "Gen Unit 8 - 846 MVA": {"mva": 846.231, "kv_pri": 23.0, "kv_sec": 23.0, "ct_n": 20000, "ct_t": 20000, "pickup": 0.10, "s1": 15, "bp": 1.5, "s2": 60, "u87": 6.0}
     },
     "TRANSFORMER": {
-        "Main Step-Up 873 MVA": {"mva": 873.6, "kv_pri": 23.0, "kv_sec": 500.0, "ct_n": 1000, "ct_t": 12000, "pickup": 0, "s1": 0, "bp": 0, "s2": 0, "u87": 0},
-        "Auxiliary Unit 112 MVA": {"mva": 112.0, "kv_pri": 23.0, "kv_sec": 13.8, "ct_n": 400, "ct_t": 8000, "pickup": 0, "s1": 0, "bp": 0, "s2": 0, "u87": 0}
+        "Main Step-Up 873 MVA": {"mva": 873.6, "kv_pri": 23.0, "kv_sec": 500.0, "ct_n": 25000, "ct_t": 1200, "pickup": 0.20, "s1": 25, "bp": 1.2, "s2": 60, "u87": 8.0},
+        "Auxiliary Unit 112 MVA": {"mva": 112.0, "kv_pri": 23.0, "kv_sec": 13.8, "ct_n": 3000, "ct_t": 5000, "pickup": 0.25, "s1": 30, "bp": 1.0, "s2": 70, "u87": 10.0}
     },
     "LINE": {
         "500kV Line": {"mva": 400.0, "kv_pri": 550.0, "kv_sec": 550.0, "ct_n": 2000, "ct_t": 2000, "pickup": 0.20, "s1": 20, "bp": 1.5, "s2": 50, "u87": 6.0}
