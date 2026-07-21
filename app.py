@@ -14,27 +14,26 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 
 # =====================================================================
-# 1. CORE MULTI-EQUIPMENT DIFFERENTIAL RELAY ENGINE (87G / 87T / 87L)
+# 1. CORE GENERATOR DIFFERENTIAL RELAY ENGINE (87G)
+#    Modes: GENERATOR (modern numerical dual-slope) and
+#           GENERATOR_LEGACY (fixed single-slope electromechanical/solid-state, e.g. GE CFD22B4A)
 # =====================================================================
 class AdvancedDifferentialRelay:
-    def __init__(self, mode, mva_rated, kv_rated_pri, kv_rated_sec=None,
+    def __init__(self, mode, mva_rated, kv_rated,
                  ct_ratio_N=1.0, ct_ratio_T=1.0, ct_secondary_rating=5.0,
                  i_pickup=0.15, slope_1=15.0, i_breakpoint=1.0, slope_2=50.0, i_unrestrained=8.0,
-                 harmonic_block_threshold=15.0, harmonic_5th_threshold=35.0, 
                  convention="IEEE", ct_polarity="OPPOSITE",
-                 vector_group="Yy0", line_length_km=0.0, charging_current_a_per_km=0.0,
                  target_amps=None):
-        self.mode = mode.upper() # 'GENERATOR', 'GENERATOR_LEGACY', 'TRANSFORMER', 'LINE'
+        self.mode = mode.upper()  # 'GENERATOR' or 'GENERATOR_LEGACY'
         self.mva_rated = mva_rated
-        self.kv_rated_pri = kv_rated_pri
-        self.kv_rated_sec = kv_rated_sec if kv_rated_sec else kv_rated_pri
+        self.kv_rated = kv_rated
         # ct_ratio_N / ct_ratio_T are entered as CT nameplate PRIMARY current (e.g. the "2000"
         # in a "2000:5" CT), matching how CTs are actually specified in the field.
         # ct_secondary_rating is the CT's rated secondary current (1 A or 5 A), which the
         # earlier version of this model silently assumed was baked into the ratio already.
         # The TRUE turns ratio used for all scaling is primary_rating / secondary_rating.
-        self.ct_ratio_N = ct_ratio_N  # In Line mode, this represents End 1 (Local) CT primary rating
-        self.ct_ratio_T = ct_ratio_T  # In Line mode, this represents End 2 (Remote) CT primary rating
+        self.ct_ratio_N = ct_ratio_N  # Neutral side CT primary rating
+        self.ct_ratio_T = ct_ratio_T  # Terminal side CT primary rating
         self.ct_secondary_rating = ct_secondary_rating
         self.effective_ratio_N = (ct_ratio_N / ct_secondary_rating) if ct_secondary_rating > 0 else ct_ratio_N
         self.effective_ratio_T = (ct_ratio_T / ct_secondary_rating) if ct_secondary_rating > 0 else ct_ratio_T
@@ -43,23 +42,17 @@ class AdvancedDifferentialRelay:
         self.i_bp = i_breakpoint
         self.s2 = slope_2 / 100.0
         self.i_unrestrained = i_unrestrained
-        self.harmonic_block_threshold = harmonic_block_threshold
-        self.harmonic_5th_threshold = harmonic_5th_threshold
         self.convention = convention.upper()
         self.ct_polarity = ct_polarity
-        self.vector_group = vector_group
-        self.line_length_km = line_length_km
-        self.charging_current_a_per_km = charging_current_a_per_km
         self.target_amps = target_amps
 
-        # 1. Base Currents Calculations
-        self.i_rated_pri_H = (mva_rated * 1000.0) / (math.sqrt(3) * self.kv_rated_pri) if self.kv_rated_pri > 0 else 1.0
-        self.i_rated_pri_L = (mva_rated * 1000.0) / (math.sqrt(3) * self.kv_rated_sec) if self.kv_rated_sec > 0 else 1.0
+        # Rated primary current (single winding voltage class — generator has no HV/LV split)
+        self.i_rated_pri = (mva_rated * 1000.0) / (math.sqrt(3) * self.kv_rated) if self.kv_rated > 0 else 1.0
 
-        # Secondary ratings on both terminals — now correctly divides by the TRUE ratio
+        # Secondary ratings on both terminals — correctly divides by the TRUE ratio
         # (primary rating / secondary rating), not the raw nameplate primary rating alone.
-        self.i_rated_sec_N = self.i_rated_pri_H / self.effective_ratio_N if self.effective_ratio_N > 0 else 1.0
-        self.i_rated_sec_T = self.i_rated_pri_L / self.effective_ratio_T if self.effective_ratio_T > 0 else 1.0
+        self.i_rated_sec_N = self.i_rated_pri / self.effective_ratio_N if self.effective_ratio_N > 0 else 1.0
+        self.i_rated_sec_T = self.i_rated_pri / self.effective_ratio_T if self.effective_ratio_T > 0 else 1.0
 
         # GENERATOR_LEGACY (e.g. GE CFD22B4A-type electromechanical/solid-state relays):
         # the real-world setting sheet specifies pickup directly as a "Target and Seal-in"
@@ -87,15 +80,11 @@ class AdvancedDifferentialRelay:
         else:
             return self.i_pickup + (self.s1 * self.i_bp) + (self.s2 * (i_rest_pu - self.i_bp))
 
-    def evaluate_protection(self, i_primary_N, angle_N_deg, i_primary_T, angle_T_deg, 
-                            harmonic_2nd_pct=0.0, harmonic_5th_pct=0.0):
+    def evaluate_protection(self, i_primary_N, angle_N_deg, i_primary_T, angle_T_deg):
         """
-        In Generator/Transformer Mode:
-            N = Neutral Side (or Primary/HV), T = Terminal Side (or Secondary/LV)
-        In GENERATOR_LEGACY Mode (e.g. GE CFD22B4A):
-            Same N/T meaning as Generator mode; single fixed-% slope, no breakpoint/87U/harmonics.
-        In Line Mode:
-            N = End 1 (Local), T = End 2 (Remote)
+        N = Neutral Side, T = Terminal Side (same winding, opposite ends — a generator
+        has no HV/LV split the way a transformer does, so there is no vector-group
+        phase-shift compensation needed or applied here).
         """
         # Step 1: Scale primary currents into secondary terms using the TRUE CT ratio
         i_N_sec_mag = i_primary_N / self.effective_ratio_N if self.effective_ratio_N > 0 else 0.0
@@ -105,25 +94,14 @@ class AdvancedDifferentialRelay:
         i_N_pu_mag = i_N_sec_mag / self.i_rated_sec_N if self.i_rated_sec_N > 0 else 0.0
         i_T_pu_mag = i_T_sec_mag / self.i_rated_sec_T if self.i_rated_sec_T > 0 else 0.0
 
-        # Step 3: Vector Group Phase Shift Compensation (For Transformers)
-        compensated_angle_T_deg = angle_T_deg
-        if self.mode == "TRANSFORMER":
-            if self.vector_group == "Dyn11":
-                # Dyn11 has secondary currents leading by 30 degrees compared to primary.
-                # To align vectors, shift secondary angle backwards by 30 degrees.
-                compensated_angle_T_deg -= 30.0
-            elif self.vector_group == "Dyn1":
-                # Dyn1 lags by 30 degrees. Compensate by adding 30 degrees.
-                compensated_angle_T_deg += 30.0
-
-        # Step 4: Complex Phasors calculation
+        # Step 3: Complex Phasors calculation
         rad_N = math.radians(angle_N_deg)
-        rad_T = math.radians(compensated_angle_T_deg)
-        
+        rad_T = math.radians(angle_T_deg)
+
         vec_N_pu = cmath.rect(i_N_pu_mag, rad_N)
         vec_T_pu = cmath.rect(i_T_pu_mag, rad_T)
 
-        # Step 5: Vector Differential Operating Current (I_op)
+        # Step 4: Vector Differential Operating Current (I_op)
         if self.ct_polarity == "SAME":
             # CT polarities pointing in same direction through protected zone
             vec_op = vec_T_pu + vec_N_pu
@@ -131,22 +109,9 @@ class AdvancedDifferentialRelay:
             # Traditional differential CT facing inward
             vec_op = vec_T_pu - vec_N_pu
 
-        # Step 6: Line Capacitive Charging Current Compensation (For Lines)
-        if self.mode == "LINE" and self.line_length_km > 0 and self.charging_current_a_per_km > 0:
-            total_charging_amps = self.charging_current_a_per_km * self.line_length_km
-            # Convert to secondary and then to p.u. (referenced to End 1 Local Base)
-            charging_sec = total_charging_amps / self.effective_ratio_N if self.effective_ratio_N > 0 else 0.0
-            charging_pu = charging_sec / self.i_rated_sec_N
-            
-            # Charging current acts as a continuous reactive fake differential current (+90 deg shift)
-            vec_charging_pu = cmath.rect(charging_pu, math.radians(90.0))
-            
-            # Compensate vector difference by subtracting charging current vector
-            vec_op = vec_op - vec_charging_pu
-
         i_op_pu = abs(vec_op)
 
-        # Step 7: Restraining Current Calculation
+        # Step 5: Restraining Current Calculation
         if self.convention == "IEEE":
             i_rest_pu = (abs(vec_T_pu) + abs(vec_N_pu)) / 2.0
         else:
@@ -154,36 +119,20 @@ class AdvancedDifferentialRelay:
 
         i_threshold_pu = self.calculate_trip_threshold(i_rest_pu)
 
-        # Step 8: Harmonic Restraint check
-        # 2nd/5th harmonic blocking is a TRANSFORMER-ONLY concept: it exists to distinguish
-        # magnetizing inrush (rich in 2nd harmonic) and overexcitation (rich in 5th harmonic)
-        # from genuine internal faults. Generators do not have a magnetic core that produces
-        # inrush the way a transformer does, so gating a generator's trip decision on these
-        # harmonics is not physically justified and would only mask real internal faults.
-        # Generator differential (87G) schemes instead rely on CT saturation detection /
-        # supervision, which is a different mechanism (see CT saturation modeling).
-        harmonic_2nd_blocked = (self.mode == "TRANSFORMER") and (harmonic_2nd_pct >= self.harmonic_block_threshold)
-        harmonic_5th_blocked = (self.mode == "TRANSFORMER") and (harmonic_5th_pct >= self.harmonic_5th_threshold)
-        is_blocked = harmonic_2nd_blocked or harmonic_5th_blocked
-
-        # Step 9: Main Tripping Decision Engine
+        # Step 6: Main Tripping Decision Engine
+        # Note: 2nd/5th harmonic inrush/overexcitation blocking is intentionally NOT modeled
+        # here — that's a transformer-only concept tied to magnetizing inrush from a magnetic
+        # core, which generators don't have. Generator differential (87G) instead relies on
+        # CT saturation detection/supervision, which is a different mechanism.
         is_unrestrained_trip = i_op_pu >= self.i_unrestrained
-        is_restrained_trip = (i_op_pu > i_threshold_pu) and not is_blocked
+        is_restrained_trip = i_op_pu > i_threshold_pu
         is_trip = is_unrestrained_trip or is_restrained_trip
 
-        # Output Text Building
         status_text = "SAFE"
         if is_unrestrained_trip:
             status_text = "UNRESTRAINED TRIP"
         elif is_restrained_trip:
             status_text = "SLOPE TRIP"
-        elif is_blocked and (i_op_pu > i_threshold_pu):
-            if harmonic_2nd_blocked and harmonic_5th_blocked:
-                status_text = "BLOCKED (2nd & 5th Harmonics)"
-            elif harmonic_2nd_blocked:
-                status_text = "BLOCKED (Inrush / 2nd Harmonic)"
-            else:
-                status_text = "BLOCKED (Overexcitation / 5th Harmonic)"
 
         return {
             "i_op_pu": i_op_pu,
@@ -191,7 +140,6 @@ class AdvancedDifferentialRelay:
             "i_threshold_pu": i_threshold_pu,
             "is_trip": is_trip,
             "is_unrestrained": is_unrestrained_trip,
-            "harmonic_blocked": is_blocked,
             "status": status_text,
             "i_N_pu_mag": i_N_pu_mag,
             "i_T_pu_mag": i_T_pu_mag
@@ -207,9 +155,8 @@ def generate_pdf_report(unit_name, relay_obj, evals, phases):
     story = []
     styles = getSampleStyleSheet()
 
-    # Clearer heading without emojis to guarantee rendering compatibility
     title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=16, textColor=colors.HexColor("#1E3A8A"))
-    story.append(Paragraph(f"Differential Protection System Evaluation Report - {relay_obj.mode} Mode", title_style))
+    story.append(Paragraph(f"Generator Differential Protection (87G) Evaluation Report - {relay_obj.mode} Mode", title_style))
     story.append(Spacer(1, 10))
 
     meta_text = f"<b>Date/Time:</b> {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | <b>Configuration:</b> {unit_name}"
@@ -217,32 +164,14 @@ def generate_pdf_report(unit_name, relay_obj, evals, phases):
     story.append(Spacer(1, 15))
 
     # Ratings & Settings Table
-    story.append(Paragraph("<b>1. Technical System Parameters</b>", styles['Heading2']))
-    
-    if relay_obj.mode == "TRANSFORMER":
-        params_data = [
-            ["Parameter", "Value", "Parameter", "Value"],
-            ["Transformer Rating", f"{relay_obj.mva_rated} MVA", "Minimum Pickup", f"{relay_obj.i_pickup} pu"],
-            ["Rated Voltage HV", f"{relay_obj.kv_rated_pri} kV", "Slope 1", f"{relay_obj.s1*100:.1f} %"],
-            ["Rated Voltage LV", f"{relay_obj.kv_rated_sec} kV", "Breakpoint", f"{relay_obj.i_bp} pu"],
-            ["Vector Group", f"{relay_obj.vector_group}", "Slope 2", f"{relay_obj.s2*100:.1f} %"],
-            ["HV / LV CT Ratios", f"{relay_obj.ct_ratio_N:.0f}:{relay_obj.ct_secondary_rating:.0f} / {relay_obj.ct_ratio_T:.0f}:{relay_obj.ct_secondary_rating:.0f}", "Unrestrained (87U)", f"{relay_obj.i_unrestrained} pu"]
-        ]
-    elif relay_obj.mode == "LINE":
-        params_data = [
-            ["Parameter", "Value", "Parameter", "Value"],
-            ["System Power Rating", f"{relay_obj.mva_rated} MVA", "Minimum Pickup", f"{relay_obj.i_pickup} pu"],
-            ["System Voltage", f"{relay_obj.kv_rated_pri} kV", "Slope 1", f"{relay_obj.s1*100:.1f} %"],
-            ["Line Length", f"{relay_obj.line_length_km} km", "Breakpoint", f"{relay_obj.i_bp} pu"],
-            ["Charging Current rate", f"{relay_obj.charging_current_a_per_km} A/km", "Slope 2", f"{relay_obj.s2*100:.1f} %"],
-            ["Local / Remote CT", f"{relay_obj.ct_ratio_N:.0f}:{relay_obj.ct_secondary_rating:.0f} / {relay_obj.ct_ratio_T:.0f}:{relay_obj.ct_secondary_rating:.0f}", "Unrestrained (87U)", f"{relay_obj.i_unrestrained} pu"]
-        ]
-    elif relay_obj.mode == "GENERATOR_LEGACY":
+    story.append(Paragraph("<b>1. Generator & Relay Parameters</b>", styles['Heading2']))
+
+    if relay_obj.mode == "GENERATOR_LEGACY":
         params_data = [
             ["Parameter", "Value", "Parameter", "Value"],
             ["Generator Rating", f"{relay_obj.mva_rated} MVA", "Target/Seal-in Pickup", f"{relay_obj.target_amps} A sec." if relay_obj.target_amps is not None else "N/A"],
-            ["Rated Voltage", f"{relay_obj.kv_rated_pri} kV", "Equivalent Pickup", f"{relay_obj.i_pickup:.3f} pu"],
-            ["Rated Current (Pri)", f"{relay_obj.i_rated_pri_H:.2f} A", "Restraint Slope (assumed)", f"{relay_obj.s1*100:.1f} %"],
+            ["Rated Voltage", f"{relay_obj.kv_rated} kV", "Equivalent Pickup", f"{relay_obj.i_pickup:.3f} pu"],
+            ["Rated Current (Pri)", f"{relay_obj.i_rated_pri:.2f} A", "Restraint Slope (assumed)", f"{relay_obj.s1*100:.1f} %"],
             ["Neutral CT Ratio", f"{relay_obj.ct_ratio_N:.0f}:{relay_obj.ct_secondary_rating:.0f}", "Breakpoint / 2nd Slope / 87U", "N/A - fixed by relay design"],
             ["Terminal CT Ratio", f"{relay_obj.ct_ratio_T:.0f}:{relay_obj.ct_secondary_rating:.0f}", "Relay Type", "GE CFD22B4A (GEK-34124)"]
         ]
@@ -250,8 +179,8 @@ def generate_pdf_report(unit_name, relay_obj, evals, phases):
         params_data = [
             ["Parameter", "Value", "Parameter", "Value"],
             ["Generator Rating", f"{relay_obj.mva_rated} MVA", "Minimum Pickup", f"{relay_obj.i_pickup} pu"],
-            ["Rated Voltage", f"{relay_obj.kv_rated_pri} kV", "Slope 1", f"{relay_obj.s1*100:.1f} %"],
-            ["Rated Current (Pri)", f"{relay_obj.i_rated_pri_H:.2f} A", "Breakpoint", f"{relay_obj.i_bp} pu"],
+            ["Rated Voltage", f"{relay_obj.kv_rated} kV", "Slope 1", f"{relay_obj.s1*100:.1f} %"],
+            ["Rated Current (Pri)", f"{relay_obj.i_rated_pri:.2f} A", "Breakpoint", f"{relay_obj.i_bp} pu"],
             ["Neutral CT Ratio", f"{relay_obj.ct_ratio_N:.0f}:{relay_obj.ct_secondary_rating:.0f}", "Slope 2", f"{relay_obj.s2*100:.1f} %"],
             ["Terminal CT Ratio", f"{relay_obj.ct_ratio_T:.0f}:{relay_obj.ct_secondary_rating:.0f}", "Unrestrained (87U)", f"{relay_obj.i_unrestrained} pu"]
         ]
@@ -292,35 +221,30 @@ def generate_pdf_report(unit_name, relay_obj, evals, phases):
 # =====================================================================
 # 3. STREAMLIT WEB APP MAIN PANEL & SYSTEM MENU
 # =====================================================================
-st.set_page_config(page_title="Differential Relay Suite", layout="wide")
+st.set_page_config(page_title="Generator Differential Relay Suite", layout="wide")
 
-st.title("⚡ Enterprise Multi-Equipment Differential Protection Suite")
-st.caption("Active Phase Vector Analysis, Complex Charging Current, Vector Group Phase Matching & Harmonic Block Control")
+st.title("⚡ Enterprise Generator Differential Protection (87G) Suite")
+st.caption("Active Phase Vector Analysis, Dual-Slope Curve Engine & Secondary Injection Testing")
 
-# MAIN NAVIGATION MENU - PICK EQUIPMENT
-st.markdown("### 🎛️ Equipment Protection Type Select")
+# MAIN NAVIGATION MENU - PICK RELAY TYPE
+st.markdown("### 🎛️ Generator Relay Type Select")
 mode_selection = st.radio(
-    "Choose Protected System Element:",
-    ["Generator Winding (87G) - Modern Numerical", "Generator Winding (87G) - Legacy Fixed-% (GE CFD22B4A)",
-     "Power Transformer (87T)", "High Voltage Transmission Line (87L)"],
+    "Choose Relay Implementation:",
+    ["Generator Winding (87G) - Modern Numerical", "Generator Winding (87G) - Legacy Fixed-% (GE CFD22B4A)"],
     horizontal=True
 )
 
 # Convert selection to internal mode
 if "Legacy" in mode_selection:
     current_mode = "GENERATOR_LEGACY"
-elif "Generator" in mode_selection:
-    current_mode = "GENERATOR"
-elif "Transformer" in mode_selection:
-    current_mode = "TRANSFORMER"
 else:
-    current_mode = "LINE"
+    current_mode = "GENERATOR"
 
 # PRESET PROFILE MANAGEMENT
 PRESETS = {
     "GENERATOR": {
-        "Gen Unit 7 - 846 MVA": {"mva": 846.231, "kv_pri": 23.0, "kv_sec": 23.0, "ct_n": 20000, "ct_t": 20000, "pickup": 0.10, "s1": 15, "bp": 1.5, "s2": 60, "u87": 6.0},
-        "Gen Unit 8 - 846 MVA": {"mva": 846.231, "kv_pri": 23.0, "kv_sec": 23.0, "ct_n": 20000, "ct_t": 20000, "pickup": 0.10, "s1": 15, "bp": 1.5, "s2": 60, "u87": 6.0}
+        "Gen Unit 7 - 846 MVA": {"mva": 846.231, "kv": 23.0, "ct_n": 20000, "ct_t": 20000, "pickup": 0.10, "s1": 15, "bp": 1.5, "s2": 60, "u87": 6.0},
+        "Gen Unit 8 - 846 MVA": {"mva": 846.231, "kv": 23.0, "ct_n": 20000, "ct_t": 20000, "pickup": 0.10, "s1": 15, "bp": 1.5, "s2": 60, "u87": 6.0}
     },
     "GENERATOR_LEGACY": {
         # Real Paiton Units 7 & 8 generator differential data, from setting sheet
@@ -331,15 +255,8 @@ PRESETS = {
         # separate field-adjustable slope setting — it's fixed into the relay's internal
         # design) — treat it as a placeholder until confirmed against the actual CFD22B4A
         # characteristic curve in GEK-34124 (or Appendix B of the setting document).
-        "Paiton Unit 7 - CFD22B4A (846 MVA)": {"mva": 846.231, "kv_pri": 23.0, "kv_sec": 23.0, "ct_n": 24000, "ct_t": 24000, "target_amps": 0.2, "s1": 10},
-        "Paiton Unit 8 - CFD22B4A (846 MVA)": {"mva": 846.231, "kv_pri": 23.0, "kv_sec": 23.0, "ct_n": 24000, "ct_t": 24000, "target_amps": 0.2, "s1": 10}
-    },
-    "TRANSFORMER": {
-        "Main Step-Up 873 MVA": {"mva": 873.6, "kv_pri": 23.0, "kv_sec": 500.0, "ct_n": 25000, "ct_t": 1200, "pickup": 0.20, "s1": 25, "bp": 1.2, "s2": 60, "u87": 8.0},
-        "Auxiliary Unit 112 MVA": {"mva": 112.0, "kv_pri": 23.0, "kv_sec": 13.8, "ct_n": 3000, "ct_t": 5000, "pickup": 0.25, "s1": 30, "bp": 1.0, "s2": 70, "u87": 10.0}
-    },
-    "LINE": {
-        "500kV Line": {"mva": 400.0, "kv_pri": 550.0, "kv_sec": 550.0, "ct_n": 2000, "ct_t": 2000, "pickup": 0.20, "s1": 20, "bp": 1.5, "s2": 50, "u87": 6.0}
+        "Paiton Unit 7 - CFD22B4A (846 MVA)": {"mva": 846.231, "kv": 23.0, "ct_n": 24000, "ct_t": 24000, "target_amps": 0.2, "s1": 10},
+        "Paiton Unit 8 - CFD22B4A (846 MVA)": {"mva": 846.231, "kv": 23.0, "ct_n": 24000, "ct_t": 24000, "target_amps": 0.2, "s1": 10}
     }
 }
 
@@ -349,27 +266,12 @@ selected_preset = st.sidebar.selectbox("Load Standard Profile", list(current_mod
 p_data = current_mode_presets[selected_preset]
 
 
-# DYNAMIC SIDEBAR CONTROLS BY EQUIPMENT TYPE
-st.sidebar.header("1. Electrical Asset Spec")
-mva = st.sidebar.number_input("Rating Capacity (MVA)", value=p_data["mva"], step=10.0)
-
-if current_mode == "TRANSFORMER":
-    kv_pri = st.sidebar.number_input("Primary Winding (kV)", value=p_data["kv_pri"], step=1.0)
-    kv_sec = st.sidebar.number_input("Secondary Winding (kV)", value=p_data["kv_sec"], step=1.0)
-    ct_ratio_N = st.sidebar.number_input("Primary Side CT Rating (Primary A, e.g. 2000 in '2000:5')", value=p_data["ct_n"])
-    ct_ratio_T = st.sidebar.number_input("Secondary Side CT Rating (Primary A)", value=p_data["ct_t"])
-    vector_group = st.sidebar.selectbox("Vector Transformer Group Shift", ["Yy0", "Dyn11", "Dyn1"], help="Compensates for delta-star physical vector shifts")
-else:
-    kv_pri = st.sidebar.number_input("System Rated Voltage (kV)", value=p_data["kv_pri"], step=1.0)
-    kv_sec = kv_pri
-    vector_group = "Yy0"
-    
-    if current_mode == "LINE":
-        ct_ratio_N = st.sidebar.number_input("Local Terminal (End 1) CT Rating (Primary A)", value=p_data["ct_n"])
-        ct_ratio_T = st.sidebar.number_input("Remote Terminal (End 2) CT Rating (Primary A)", value=p_data["ct_t"])
-    else: # GENERATOR
-        ct_ratio_N = st.sidebar.number_input("Neutral Side CT Rating (Primary A, e.g. 20000 in '20000:5')", value=p_data["ct_n"])
-        ct_ratio_T = st.sidebar.number_input("Terminal Side CT Rating (Primary A)", value=p_data["ct_t"])
+# DYNAMIC SIDEBAR CONTROLS
+st.sidebar.header("1. Generator & CT Spec")
+mva = st.sidebar.number_input("Generator Rating (MVA)", value=p_data["mva"], step=10.0)
+kv = st.sidebar.number_input("Rated Voltage (kV)", value=p_data["kv"], step=1.0)
+ct_ratio_N = st.sidebar.number_input("Neutral Side CT Rating (Primary A, e.g. 20000 in '20000:5')", value=p_data["ct_n"])
+ct_ratio_T = st.sidebar.number_input("Terminal Side CT Rating (Primary A)", value=p_data["ct_t"])
 
 ct_secondary_rating = st.sidebar.selectbox(
     "CT Secondary Rating (A)", [1.0, 5.0], index=1,
@@ -378,19 +280,11 @@ ct_secondary_rating = st.sidebar.selectbox(
          "per-unit scaling — entering only the primary rating without this was a labelling bug."
 )
 st.sidebar.caption(
-    f"Effective ratio → Neutral/End1: **{ct_ratio_N:.0f} : {ct_secondary_rating:.0f}** "
+    f"Effective ratio → Neutral: **{ct_ratio_N:.0f} : {ct_secondary_rating:.0f}** "
     f"(= {ct_ratio_N/ct_secondary_rating:.1f}:1)  |  "
-    f"Terminal/End2: **{ct_ratio_T:.0f} : {ct_secondary_rating:.0f}** "
+    f"Terminal: **{ct_ratio_T:.0f} : {ct_secondary_rating:.0f}** "
     f"(= {ct_ratio_T/ct_secondary_rating:.1f}:1)"
 )
-
-if current_mode == "LINE":
-    st.sidebar.header("🗺️ Line Geometry & Transmission")
-    line_len = st.sidebar.number_input("Line Length (km)", value=50.0, step=10.0)
-    charging_curr = st.sidebar.number_input("Charging Current rate (A/km)", value=0.15, step=0.05, help="Capacitive charging current parameter")
-else:
-    line_len = 0.0
-    charging_curr = 0.0
 
 st.sidebar.header("2. Protection Characteristic")
 target_amps = None
@@ -420,24 +314,18 @@ else:
     slope_2 = st.sidebar.slider("Slope 2 (%)", 30, 100, p_data["s2"], 5)
     i_unrestrained = st.sidebar.slider("High-Set Unrestrained $87U$ (pu)", 3.0, 15.0, p_data["u87"], 0.5)
 
-st.sidebar.header("3. Blocking Harmonics & Wiring")
-if current_mode == "TRANSFORMER":
-    harmonic_block_thresh = st.sidebar.slider("2nd Harmonic Limit (%)", 10, 30, 15, 1, help="Blocks on Transformer Inrush current")
-    harmonic_5th_thresh = st.sidebar.slider("5th Harmonic Limit (%)", 20, 50, 35, 1, help="Blocks on Transformer Overexcitation")
+st.sidebar.header("3. Wiring & Convention")
+if current_mode == "GENERATOR_LEGACY":
+    st.sidebar.caption(
+        "ℹ️ This relay has no harmonic restraint capability — it's a fixed "
+        "percentage-differential design with a single pickup setting only."
+    )
 else:
-    harmonic_block_thresh = 15.0
-    harmonic_5th_thresh = 35.0
-    if current_mode == "GENERATOR":
-        st.sidebar.caption(
-            "ℹ️ 2nd/5th harmonic blocking is not applicable to generators — "
-            "generators don't produce magnetizing inrush the way transformer "
-            "cores do, so this element is disabled in Generator mode."
-        )
-    elif current_mode == "GENERATOR_LEGACY":
-        st.sidebar.caption(
-            "ℹ️ This relay has no harmonic restraint capability — it's a fixed "
-            "percentage-differential design with a single pickup setting only."
-        )
+    st.sidebar.caption(
+        "ℹ️ 2nd/5th harmonic blocking is not applicable to generators — "
+        "generators don't produce magnetizing inrush the way transformer "
+        "cores do, so this element isn't modeled here."
+    )
 
 col_conv, col_pol = st.sidebar.columns(2)
 with col_conv:
@@ -447,12 +335,10 @@ with col_pol:
 
 # Create main relay object
 relay = AdvancedDifferentialRelay(
-    mode=current_mode, mva_rated=mva, kv_rated_pri=kv_pri, kv_rated_sec=kv_sec,
+    mode=current_mode, mva_rated=mva, kv_rated=kv,
     ct_ratio_N=ct_ratio_N, ct_ratio_T=ct_ratio_T, ct_secondary_rating=ct_secondary_rating,
     i_pickup=i_pickup, slope_1=slope_1, i_breakpoint=i_bp, slope_2=slope_2, i_unrestrained=i_unrestrained,
-    harmonic_block_threshold=harmonic_block_thresh, harmonic_5th_threshold=harmonic_5th_thresh,
     convention=convention, ct_polarity=ct_polarity,
-    vector_group=vector_group, line_length_km=line_len, charging_current_a_per_km=charging_curr,
     target_amps=target_amps
 )
 
@@ -464,7 +350,7 @@ with tab1:
     col_inputs, col_results = st.columns([1.2, 1.0])
 
     with col_inputs:
-        st.subheader("Primary (System) Operating Phase Inputs")
+        st.subheader("Primary (Generator) Operating Phase Inputs")
         st.caption(
             "Enter the actual PRIMARY-side current in Amps (e.g. generator load current or "
             "fault current at the machine terminals) — the app converts this through the CT "
@@ -472,69 +358,45 @@ with tab1:
             "yourself. For the actual 0–5 A (or 0–1 A) secondary current you'd inject into "
             "the physical relay during testing, see the Commissioning & Injection Tool tab."
         )
-        
-        # Display derived system values
-        if current_mode == "TRANSFORMER":
-            st.info(f"Nominal Rated Primary Current: **{relay.i_rated_pri_H:.1f} A** | Secondary: **{relay.i_rated_pri_L:.1f} A**")
-        elif current_mode == "LINE":
-            st.info(f"Nominal Line Rated Current: **{relay.i_rated_pri_H:.1f} A**")
-        else:
-            st.info(f"Generator Nominal Rated Current: **{relay.i_rated_pri_H:.1f} A**")
+
+        st.info(f"Generator Nominal Rated Current: **{relay.i_rated_pri:.1f} A**")
 
         phases = ["Phase A", "Phase B", "Phase C"]
 
-        # Side labels must match the actual physical meaning of N/T per equipment type —
         # Generator: both CTs sit on the SAME winding at the same voltage (neutral end vs
-        # terminal end), so "Primary/Secondary" (a transformer voltage-ratio concept) is wrong.
-        if current_mode in ("GENERATOR", "GENERATOR_LEGACY"):
-            n_side_label, t_side_label = "Neutral Side (End 1)", "Terminal Side (End 2)"
-        elif current_mode == "TRANSFORMER":
-            n_side_label, t_side_label = "Primary (HV)", "Secondary (LV)"
-        else:  # LINE
-            n_side_label, t_side_label = "Local (End 1)", "Remote (End 2)"
+        # terminal end).
+        n_side_label, t_side_label = "Neutral Side (End 1)", "Terminal Side (End 2)"
         inputs = {}
 
         # Capture Phase inputs in tabs/expanders
         for idx, phase in enumerate(phases):
             with st.expander(f"📌 {phase} Settings", expanded=(phase == "Phase A")):
-                if current_mode in ("GENERATOR", "GENERATOR_LEGACY"):
-                    c1, c2 = st.columns(2)
-                else:
-                    c1, c2, c3 = st.columns(3)
-                
+                c1, c2 = st.columns(2)
+
                 # Default values for anti-parallel current flow under healthy conditions
-                def_val_N = relay.i_rated_pri_H if phase == "Phase A" else 0.0
-                def_val_T = relay.i_rated_pri_L if phase == "Phase A" else 0.0
+                def_val = relay.i_rated_pri if phase == "Phase A" else 0.0
                 def_ang_N = -120.0 * idx
                 # Under opposite CT polarity, normal load will show terminal side shifted by 180 deg
                 def_ang_T = def_ang_N + 180.0 if ct_polarity == "OPPOSITE" else def_ang_N
-                
+
                 with c1:
-                    i_N = st.number_input(f"{n_side_label} Primary Amps [A]", value=def_val_N, key=f"N_i_{phase}")
+                    i_N = st.number_input(f"{n_side_label} Primary Amps [A]", value=def_val, key=f"N_i_{phase}")
                     a_N = st.number_input(f"{n_side_label} Angle (°)", value=def_ang_N, key=f"N_a_{phase}")
                 with c2:
-                    i_T = st.number_input(f"{t_side_label} Primary Amps [A]", value=def_val_T, key=f"T_i_{phase}")
+                    i_T = st.number_input(f"{t_side_label} Primary Amps [A]", value=def_val, key=f"T_i_{phase}")
                     a_T = st.number_input(f"{t_side_label} Angle (°)", value=def_ang_T, key=f"T_a_{phase}")
-                if current_mode in ("GENERATOR", "GENERATOR_LEGACY"):
-                    h2 = 0.0
-                    h5 = 0.0
-                else:
-                    with c3:
-                        h2 = st.number_input(f"2nd Harmonic (%)", value=0.0, key=f"H2_{phase}")
-                        h5 = st.number_input(f"5th Harmonic (%)", value=0.0, key=f"H5_{phase}")
 
-                inputs[phase] = {"i_N": i_N, "a_N": a_N, "i_T": i_T, "a_T": a_T, "h2": h2, "h5": h5}
+                inputs[phase] = {"i_N": i_N, "a_N": a_N, "i_T": i_T, "a_T": a_T}
 
         # Calculate live state evaluation
         evals = {p: relay.evaluate_protection(
-            inputs[p]["i_N"], inputs[p]["a_N"], 
-            inputs[p]["i_T"], inputs[p]["a_T"], 
-            inputs[p]["h2"], inputs[p]["h5"]
+            inputs[p]["i_N"], inputs[p]["a_N"],
+            inputs[p]["i_T"], inputs[p]["a_T"]
         ) for p in phases}
 
     with col_results:
         st.subheader("Real-time Protection Verdict")
-        
+
         any_trip = any(res["is_trip"] for res in evals.values())
         if any_trip:
             st.error("🚨 PROTECTIVE RELAY TRIP INITIATED!")
@@ -559,7 +421,7 @@ with tab1:
         st.download_button(
             label="📄 Export Certified Protection Audit Report",
             data=pdf_bytes,
-            file_name=f"Differential_Protection_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
+            file_name=f"Generator_Differential_Protection_Report_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pdf",
             mime="application/pdf"
         )
 
@@ -638,12 +500,7 @@ with tab2:
     st.markdown("---")
     st.write("### Target Relay Secondary Terminal Current Injection Parameters:")
 
-    if current_mode in ("GENERATOR", "GENERATOR_LEGACY"):
-        n_inj_label, t_inj_label = "Neutral Side", "Terminal Side"
-    elif current_mode == "TRANSFORMER":
-        n_inj_label, t_inj_label = "Primary Winding", "Secondary Winding"
-    else:
-        n_inj_label, t_inj_label = "Local (End 1)", "Remote (End 2)"
+    n_inj_label, t_inj_label = "Neutral Side", "Terminal Side"
 
     c_sec_a, c_sec_b = st.columns(2)
     with c_sec_a:
