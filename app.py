@@ -16,16 +16,23 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 # =====================================================================
 # 1. CORE GENERATOR DIFFERENTIAL RELAY ENGINE (87G)
-#    Modes: GENERATOR (modern numerical dual-slope) and
-#           GENERATOR_LEGACY (fixed single-slope electromechanical/solid-state, e.g. GE CFD22B4A)
+#    Modes:
+#      GENERATOR         - GE G60-style dual-breakpoint numerical characteristic:
+#                           flat at Pickup until Break1, Slope1 from Break1 to Break2,
+#                           Slope2 beyond Break2. Settings/ranges per G60 instruction manual.
+#      GENERATOR_LEGACY   - fixed single-slope electromechanical/solid-state relay
+#                           (e.g. GE CFD22B4A): one slope from zero restraint, no
+#                           breakpoints, no field-adjustable 2nd slope or high-set.
 # =====================================================================
 class AdvancedDifferentialRelay:
     def __init__(self, mode, mva_rated, kv_rated,
                  ct_ratio_N=1.0, ct_ratio_T=1.0, ct_secondary_rating=5.0,
-                 i_pickup=0.15, slope_1=15.0, i_breakpoint=1.0, slope_2=50.0, i_unrestrained=8.0,
+                 i_pickup=0.10, slope_1=15.0, slope_2=60.0,
+                 break_1=1.10, break_2=6.00,
+                 i_unrestrained=None,
                  convention="IEEE", ct_polarity="OPPOSITE",
                  target_amps=None):
-        self.mode = mode.upper()  # 'GENERATOR' or 'GENERATOR_LEGACY'
+        self.mode = mode.upper()  # 'GENERATOR' (GE G60) or 'GENERATOR_LEGACY' (GE CFD22B4A)
         self.mva_rated = mva_rated
         self.kv_rated = kv_rated
         # ct_ratio_N / ct_ratio_T are entered as CT nameplate PRIMARY current (e.g. the "2000"
@@ -40,9 +47,13 @@ class AdvancedDifferentialRelay:
         self.effective_ratio_T = (ct_ratio_T / ct_secondary_rating) if ct_secondary_rating > 0 else ct_ratio_T
         self.i_pickup = i_pickup
         self.s1 = slope_1 / 100.0
-        self.i_bp = i_breakpoint
         self.s2 = slope_2 / 100.0
-        self.i_unrestrained = i_unrestrained
+        self.break_1 = break_1
+        self.break_2 = break_2
+        # Unrestrained/high-set element: NOT assumed present. Only modeled if the caller
+        # explicitly passes a value (i.e. the user confirmed it exists in their manual and
+        # enabled it in the UI). None/unset -> effectively disabled (unreachable).
+        self.i_unrestrained = i_unrestrained if i_unrestrained is not None else 1e6
         self.convention = convention.upper()
         self.ct_polarity = ct_polarity
         self.target_amps = target_amps
@@ -61,25 +72,32 @@ class AdvancedDifferentialRelay:
         # into the per-unit pickup this engine works in, referenced to the neutral-side CT.
         if self.mode == "GENERATOR_LEGACY" and target_amps is not None and self.i_rated_sec_N > 0:
             self.i_pickup = target_amps / self.i_rated_sec_N
-            # This relay type has no field-adjustable breakpoint, second slope, or
+            # This relay type has no field-adjustable breakpoints, second slope, or
             # unrestrained high-set element — those simply don't exist as settings on it.
-            # Force the characteristic to a single fixed-percentage slope with no upper
-            # discontinuity, and disable the unrestrained element (set effectively unreachable).
-            self.i_bp = 1e6
             self.s2 = self.s1
             self.i_unrestrained = 1e6
 
     def calculate_trip_threshold(self, i_rest_pu):
         """Calculates boundary operating current threshold.
-        Dual-slope (modern numerical relays): pickup + slope1 up to breakpoint, then slope2 beyond it.
-        GENERATOR_LEGACY (e.g. CFD22B4A): single fixed percentage slope, no breakpoint/second slope —
-        those aren't settings this hardware has, so i_bp is forced unreachable and s2==s1 in __init__,
-        making this formula collapse to a straight single-slope line for that mode automatically.
+
+        GENERATOR_LEGACY (e.g. CFD22B4A): single fixed percentage slope starting from
+        zero restraint current — this hardware has no flat pickup zone or breakpoints.
+
+        GENERATOR (GE G60 numerical, per instruction manual):
+            Ir <= Break1            -> Threshold = Pickup                        (flat zone)
+            Break1 < Ir <= Break2   -> Threshold = Pickup + Slope1*(Ir - Break1)
+            Ir > Break2             -> Threshold = Pickup + Slope1*(Break2-Break1)
+                                                    + Slope2*(Ir - Break2)
         """
-        if i_rest_pu <= self.i_bp:
+        if self.mode == "GENERATOR_LEGACY":
             return self.i_pickup + (self.s1 * i_rest_pu)
+
+        if i_rest_pu <= self.break_1:
+            return self.i_pickup
+        elif i_rest_pu <= self.break_2:
+            return self.i_pickup + self.s1 * (i_rest_pu - self.break_1)
         else:
-            return self.i_pickup + (self.s1 * self.i_bp) + (self.s2 * (i_rest_pu - self.i_bp))
+            return self.i_pickup + self.s1 * (self.break_2 - self.break_1) + self.s2 * (i_rest_pu - self.break_2)
 
     def evaluate_protection(self, i_primary_N, angle_N_deg, i_primary_T, angle_T_deg):
         """
@@ -147,22 +165,6 @@ class AdvancedDifferentialRelay:
         }
 
 
-def compute_slope_margin_pct(e):
-    """Positive = % headroom remaining before a slope trip. Negative = % already past threshold."""
-    if e["i_threshold_pu"] > 0:
-        return ((e["i_threshold_pu"] - e["i_op_pu"]) / e["i_threshold_pu"]) * 100.0
-    return 0.0
-
-
-def compute_87u_margin_pct(e, relay_obj):
-    """Positive = % headroom before the unrestrained high-set element operates. None if not applicable."""
-    if relay_obj.i_unrestrained >= 1e5:
-        return None
-    if relay_obj.i_unrestrained > 0:
-        return ((relay_obj.i_unrestrained - e["i_op_pu"]) / relay_obj.i_unrestrained) * 100.0
-    return None
-
-
 # =====================================================================
 # 2. PDF SHIFT LOG REPORT GENERATOR
 # =====================================================================
@@ -189,17 +191,19 @@ def generate_pdf_report(unit_name, relay_obj, evals, phases):
             ["Generator Rating", f"{relay_obj.mva_rated} MVA", "Target/Seal-in Pickup", f"{relay_obj.target_amps} A sec." if relay_obj.target_amps is not None else "N/A"],
             ["Rated Voltage", f"{relay_obj.kv_rated} kV", "Equivalent Pickup", f"{relay_obj.i_pickup:.3f} pu"],
             ["Rated Current (Pri)", f"{relay_obj.i_rated_pri:.2f} A", "Restraint Slope (assumed)", f"{relay_obj.s1*100:.1f} %"],
-            ["Neutral CT Ratio", f"{relay_obj.ct_ratio_N:.0f}:{relay_obj.ct_secondary_rating:.0f}", "Breakpoint / 2nd Slope / 87U", "N/A - fixed by relay design"],
+            ["Neutral CT Ratio", f"{relay_obj.ct_ratio_N:.0f}:{relay_obj.ct_secondary_rating:.0f}", "Breakpoints / 2nd Slope / High-Set", "N/A - fixed by relay design"],
             ["Terminal CT Ratio", f"{relay_obj.ct_ratio_T:.0f}:{relay_obj.ct_secondary_rating:.0f}", "Relay Type", "GE CFD22B4A (GEK-34124)"]
         ]
-    else:  # GENERATOR
+    else:  # GENERATOR (GE G60)
+        has_unrestrained = relay_obj.i_unrestrained < 1e5
         params_data = [
             ["Parameter", "Value", "Parameter", "Value"],
-            ["Generator Rating", f"{relay_obj.mva_rated} MVA", "Minimum Pickup", f"{relay_obj.i_pickup} pu"],
-            ["Rated Voltage", f"{relay_obj.kv_rated} kV", "Slope 1", f"{relay_obj.s1*100:.1f} %"],
-            ["Rated Current (Pri)", f"{relay_obj.i_rated_pri:.2f} A", "Breakpoint", f"{relay_obj.i_bp} pu"],
-            ["Neutral CT Ratio", f"{relay_obj.ct_ratio_N:.0f}:{relay_obj.ct_secondary_rating:.0f}", "Slope 2", f"{relay_obj.s2*100:.1f} %"],
-            ["Terminal CT Ratio", f"{relay_obj.ct_ratio_T:.0f}:{relay_obj.ct_secondary_rating:.0f}", "Unrestrained (87U)", f"{relay_obj.i_unrestrained} pu"]
+            ["Generator Rating", f"{relay_obj.mva_rated} MVA", "Pickup", f"{relay_obj.i_pickup:.3f} pu"],
+            ["Rated Voltage", f"{relay_obj.kv_rated} kV", "Slope 1", f"{relay_obj.s1*100:.0f} %"],
+            ["Rated Current (Pri)", f"{relay_obj.i_rated_pri:.2f} A", "Slope 2", f"{relay_obj.s2*100:.0f} %"],
+            ["Neutral CT Ratio", f"{relay_obj.ct_ratio_N:.0f}:{relay_obj.ct_secondary_rating:.0f}", "Break 1", f"{relay_obj.break_1:.2f} pu"],
+            ["Terminal CT Ratio", f"{relay_obj.ct_ratio_T:.0f}:{relay_obj.ct_secondary_rating:.0f}", "Break 2", f"{relay_obj.break_2:.2f} pu"],
+            ["Relay Type", "GE G60 (Numerical)", "Unrestrained High-Set", f"{relay_obj.i_unrestrained:.2f} pu" if has_unrestrained else "Not enabled / unconfirmed"]
         ]
 
     t_params = Table(params_data, colWidths=[130, 130, 130, 130])
@@ -215,13 +219,12 @@ def generate_pdf_report(unit_name, relay_obj, evals, phases):
 
     # Phase Results Table
     story.append(Paragraph("<b>2. Evaluation Results</b>", styles['Heading2']))
-    results_data = [["Phase", "I_op [pu]", "I_rest [pu]", "Threshold [pu]", "Margin [%]", "Status"]]
+    results_data = [["Phase", "I_op [pu]", "I_rest [pu]", "Threshold [pu]", "Status"]]
     for p in phases:
         e = evals[p]
-        margin = compute_slope_margin_pct(e)
-        results_data.append([p, f"{e['i_op_pu']:.3f}", f"{e['i_rest_pu']:.3f}", f"{e['i_threshold_pu']:.3f}", f"{margin:+.1f}%", e['status']])
+        results_data.append([p, f"{e['i_op_pu']:.3f}", f"{e['i_rest_pu']:.3f}", f"{e['i_threshold_pu']:.3f}", e['status']])
 
-    t_results = Table(results_data, colWidths=[75, 80, 80, 90, 80, 135])
+    t_results = Table(results_data, colWidths=[90, 90, 90, 100, 150])
     t_results.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1E3A8A")),
         ('TEXTCOLOR', (0,0), (-1,0), colors.white),
@@ -242,23 +245,13 @@ def generate_pdf_report(unit_name, relay_obj, evals, phases):
 st.set_page_config(page_title="Generator Differential Relay Suite", layout="wide")
 
 st.title("⚡ Enterprise Generator Differential Protection (87G) Suite")
-st.caption("Active Phase Vector Analysis, Dual-Slope Curve Engine, Scenario Testing & Shift Log Export")
-
-# Persistent session state for the shift test log and sweep table
-if "test_log" not in st.session_state:
-    st.session_state.test_log = []
-if "last_scenario" not in st.session_state:
-    st.session_state.last_scenario = "Manual / Custom"
-
-# TECHNICIAN / SESSION INFO
-st.sidebar.header("👷 Test Session Info")
-tech_name = st.sidebar.text_input("Technician / Tester Name", value="")
+st.caption("Active Phase Vector Analysis, GE G60 Dual-Breakpoint Curve Engine & Secondary Injection Testing")
 
 # MAIN NAVIGATION MENU - PICK RELAY TYPE
 st.markdown("### 🎛️ Generator Relay Type Select")
 mode_selection = st.radio(
     "Choose Relay Implementation:",
-    ["Generator Winding (87G) - Modern Numerical", "Generator Winding (87G) - Legacy Fixed-% (GE CFD22B4A)"],
+    ["Generator Winding (87G) - GE G60 (Digital/Numerical)", "Generator Winding (87G) - Legacy Fixed-% (GE CFD22B4A)"],
     horizontal=True
 )
 
@@ -271,8 +264,12 @@ else:
 # PRESET PROFILE MANAGEMENT
 PRESETS = {
     "GENERATOR": {
-        "Gen Unit 7 - 846 MVA": {"mva": 846.231, "kv": 23.0, "ct_n": 20000, "ct_t": 20000, "pickup": 0.10, "s1": 15, "bp": 1.5, "s2": 60, "u87": 6.0},
-        "Gen Unit 8 - 846 MVA": {"mva": 846.231, "kv": 23.0, "ct_n": 20000, "ct_t": 20000, "pickup": 0.10, "s1": 15, "bp": 1.5, "s2": 60, "u87": 6.0}
+        # Setting ranges/steps per GE G60 instruction manual:
+        #   Pickup: 0.050-1.00 pu (step 0.01) | Slope1/Slope2: 1-100% (step 1)
+        #   Break1: 1.00-1.50 pu (step 0.01) | Break2: 1.50-30.00 pu (step 0.01)
+        #   Operate time: <3/4 cycle when I_diff > 5x Pickup (speed spec, not modeled numerically)
+        "Gen Unit 7 - 846 MVA": {"mva": 846.231, "kv": 23.0, "ct_n": 20000, "ct_t": 20000, "pickup": 0.10, "s1": 15, "break_1": 1.10, "s2": 60, "break_2": 6.00},
+        "Gen Unit 8 - 846 MVA": {"mva": 846.231, "kv": 23.0, "ct_n": 20000, "ct_t": 20000, "pickup": 0.10, "s1": 15, "break_1": 1.10, "s2": 60, "break_2": 6.00}
     },
     "GENERATOR_LEGACY": {
         # Real Paiton Units 7 & 8 generator differential data, from setting sheet
@@ -316,6 +313,8 @@ st.sidebar.caption(
 
 st.sidebar.header("2. Protection Characteristic")
 target_amps = None
+i_unrestrained_value = None
+
 if current_mode == "GENERATOR_LEGACY":
     st.sidebar.caption(
         "ℹ️ This relay (e.g. GE CFD22B4A) has only ONE field setting — everything else "
@@ -334,13 +333,45 @@ if current_mode == "GENERATOR_LEGACY":
              "in GEK-34124."
     )
     i_pickup = 0.0  # overridden inside the relay class from target_amps for this mode
-    i_bp, slope_2, i_unrestrained = 1e6, slope_1, 1e6  # no breakpoint/2nd slope/87U on this hardware
-else:
-    i_pickup = st.sidebar.slider("Minimum Pickup $I_{pk}$ (pu)", 0.05, 0.50, p_data["pickup"], 0.01)
-    slope_1 = st.sidebar.slider("Slope 1 (%)", 5, 40, p_data["s1"], 1)
-    i_bp = st.sidebar.slider("Breakpoint Knee-point $I_{bp}$ (pu)", 0.5, 4.0, p_data["bp"], 0.1)
-    slope_2 = st.sidebar.slider("Slope 2 (%)", 30, 100, p_data["s2"], 5)
-    i_unrestrained = st.sidebar.slider("High-Set Unrestrained $87U$ (pu)", 3.0, 15.0, p_data["u87"], 0.5)
+    slope_2 = slope_1
+    break_1, break_2 = 1e6, 1e6  # unused in legacy formula
+
+else:  # GENERATOR - GE G60, ranges/steps per instruction manual
+    i_pickup = st.sidebar.slider(
+        "Pickup (pu)", min_value=0.05, max_value=1.00, value=p_data["pickup"], step=0.01,
+        help="G60 manual range: 0.050 to 1.00 pu, step 0.01"
+    )
+    slope_1 = st.sidebar.slider(
+        "Slope 1 (%)", min_value=1, max_value=100, value=p_data["s1"], step=1,
+        help="G60 manual range: 1 to 100%, step 1"
+    )
+    break_1 = st.sidebar.slider(
+        "Break 1 (pu)", min_value=1.00, max_value=1.50, value=p_data["break_1"], step=0.01,
+        help="G60 manual range: 1.00 to 1.50 pu, step 0.01. Restraint stays flat at Pickup below this point."
+    )
+    slope_2 = st.sidebar.slider(
+        "Slope 2 (%)", min_value=1, max_value=100, value=p_data["s2"], step=1,
+        help="G60 manual range: 1 to 100%, step 1"
+    )
+    break_2 = st.sidebar.slider(
+        "Break 2 (pu)", min_value=1.50, max_value=30.00, value=p_data["break_2"], step=0.01,
+        help="G60 manual range: 1.50 to 30.00 pu, step 0.01. Slope 2 applies above this point."
+    )
+
+    st.sidebar.caption(
+        "ℹ️ Per G60 manual: operate time is **<¾ cycle when I_diff > 5× Pickup**. This is a "
+        "relay *speed* specification, not a separate trip threshold, so it isn't modeled "
+        "numerically here."
+    )
+
+    enable_unrestrained = st.sidebar.checkbox(
+        "Enable Unrestrained High-Set Element",
+        value=False,
+        help="Only enable this if your G60 manual confirms a separate unrestrained/high-set "
+             "differential element with its own pickup setting. Left unconfirmed by default."
+    )
+    if enable_unrestrained:
+        i_unrestrained_value = st.sidebar.slider("Unrestrained High-Set Pickup (pu)", 3.0, 30.0, 8.0, 0.5)
 
 st.sidebar.header("3. Wiring & Convention")
 if current_mode == "GENERATOR_LEGACY":
@@ -365,13 +396,15 @@ with col_pol:
 relay = AdvancedDifferentialRelay(
     mode=current_mode, mva_rated=mva, kv_rated=kv,
     ct_ratio_N=ct_ratio_N, ct_ratio_T=ct_ratio_T, ct_secondary_rating=ct_secondary_rating,
-    i_pickup=i_pickup, slope_1=slope_1, i_breakpoint=i_bp, slope_2=slope_2, i_unrestrained=i_unrestrained,
+    i_pickup=i_pickup, slope_1=slope_1, slope_2=slope_2,
+    break_1=break_1, break_2=break_2,
+    i_unrestrained=i_unrestrained_value,
     convention=convention, ct_polarity=ct_polarity,
     target_amps=target_amps
 )
 
 # TABS CONFIG
-tab1, tab2, tab3 = st.tabs(["📊 Live Vector Simulation", "🧰 Commissioning & Injection Tool", "🗂️ Test Log & Export"])
+tab1, tab2 = st.tabs(["📊 Live Vector Simulation", "🧰 Commissioning & Injection Tool"])
 
 
 with tab1:
@@ -394,64 +427,6 @@ with tab1:
         # Generator: both CTs sit on the SAME winding at the same voltage (neutral end vs
         # terminal end).
         n_side_label, t_side_label = "Neutral Side (End 1)", "Terminal Side (End 2)"
-
-        # -------------------------------------------------------------
-        # QUICK SCENARIO LOADER
-        # Pre-fills the phase inputs below with realistic textbook values for common
-        # test/event conditions, so you don't have to hand-derive angles and magnitudes
-        # for every test. Values are illustrative starting points — always compare
-        # against your actual event/test record.
-        # -------------------------------------------------------------
-        st.markdown("#### ⚡ Quick Scenario Loader")
-        scenario = st.selectbox(
-            "Load a test scenario into the phase inputs below",
-            ["Manual / Custom", "Normal Load (Healthy, Balanced)",
-             "External / Through-Fault (Should NOT Trip)",
-             "Internal Fault (Should Trip)",
-             "CT Saturation on Through-Fault (False-Trip Risk)"]
-        )
-        apply_scenario = st.button("↪️ Apply Scenario to Phase Inputs Below")
-
-        if apply_scenario and scenario != "Manual / Custom":
-            base = relay.i_rated_pri
-            for idx, ph in enumerate(phases):
-                ang_N = -120.0 * idx
-                ang_T = ang_N + 180.0 if ct_polarity == "OPPOSITE" else ang_N
-
-                if scenario == "Normal Load (Healthy, Balanced)":
-                    # Balanced full-load current, CTs track each other perfectly -> near-zero operate
-                    i_n, i_t = base, base
-                    a_n, a_t = ang_N, ang_T
-
-                elif scenario == "External / Through-Fault (Should NOT Trip)":
-                    # Large symmetric through-current on all 3 phases, both CTs track it identically
-                    # -> high restraint current, but operate current stays near zero
-                    i_n, i_t = base * 4.0, base * 4.0
-                    a_n, a_t = ang_N, ang_T
-
-                elif scenario == "Internal Fault (Should Trip)":
-                    # Fault current feeds in mainly from the terminal side; little/no current
-                    # returns via the neutral side -> large genuine operate current
-                    i_n, i_t = base * 0.3, base * 5.0
-                    a_n, a_t = ang_N, ang_N  # no 180° reversal -> vectors add as real operate current
-
-                else:  # CT Saturation on Through-Fault
-                    # Same large through-fault as above, but the Terminal CT partially saturates:
-                    # its reported magnitude sags and its phase angle shifts -> spurious operate
-                    # current that could mimic an internal fault if the slope/margin isn't adequate
-                    i_n = base * 5.0
-                    i_t = base * 3.5
-                    a_n = ang_N
-                    a_t = ang_T + 15.0
-
-                st.session_state[f"N_i_{ph}"] = float(i_n)
-                st.session_state[f"N_a_{ph}"] = float(a_n)
-                st.session_state[f"T_i_{ph}"] = float(i_t)
-                st.session_state[f"T_a_{ph}"] = float(a_t)
-
-            st.session_state.last_scenario = scenario
-            st.success(f"Scenario '{scenario}' applied below. Values can still be edited manually.")
-
         inputs = {}
 
         # Capture Phase inputs in tabs/expanders
@@ -489,26 +464,18 @@ with tab1:
         else:
             st.success("✅ SYSTEM HEALTHY (Stability / Restraint Zone)")
 
-        # Summary Metrics Table (now includes trip margin)
-        has_unrestrained_element = relay.i_unrestrained < 1e5
+        # Summary Metrics Table
         table_rows = []
         for p in phases:
             e = evals[p]
-            margin_slope = compute_slope_margin_pct(e)
-            row = {
+            table_rows.append({
                 "Phase": p,
                 "I_op [pu]": f"{e['i_op_pu']:.3f}",
                 "I_rest [pu]": f"{e['i_rest_pu']:.3f}",
                 "Threshold [pu]": f"{e['i_threshold_pu']:.3f}",
-                "Margin to Slope Trip": f"{margin_slope:+.1f}%",
-            }
-            if has_unrestrained_element:
-                margin_87u = compute_87u_margin_pct(e, relay)
-                row["Margin to 87U"] = f"{margin_87u:+.1f}%" if margin_87u is not None else "N/A"
-            row["Action Verdict"] = e["status"]
-            table_rows.append(row)
+                "Action Verdict": e["status"]
+            })
         st.table(table_rows)
-        st.caption("Margin is **positive** = % headroom remaining before that element operates. **Negative** = already past the threshold (tripped on that element).")
 
         # PDF Export Process
         pdf_bytes = generate_pdf_report(selected_preset, relay, evals, phases)
@@ -519,70 +486,13 @@ with tab1:
             mime="application/pdf"
         )
 
-        # -------------------------------------------------------------
-        # LOG THIS TEST TO THE SHIFT LOG
-        # -------------------------------------------------------------
-        st.markdown("---")
-        st.write("**Save this result to the shift test log:**")
-        test_note = st.text_input("Test note (optional)", key="test_note_input")
-        if st.button("📌 Log This Test"):
-            entry = {
-                "Timestamp": datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                "Technician": tech_name if tech_name else "N/A",
-                "Mode": current_mode,
-                "Preset": selected_preset,
-                "Scenario": st.session_state.last_scenario,
-                "Note": test_note,
-            }
-            for p in phases:
-                e = evals[p]
-                entry[f"{p} I_op(pu)"] = round(e["i_op_pu"], 3)
-                entry[f"{p} I_rest(pu)"] = round(e["i_rest_pu"], 3)
-                entry[f"{p} Threshold(pu)"] = round(e["i_threshold_pu"], 3)
-                entry[f"{p} Margin(%)"] = round(compute_slope_margin_pct(e), 1)
-                entry[f"{p} Status"] = e["status"]
-            entry["Overall Verdict"] = "TRIP" if any_trip else "SAFE"
-            st.session_state.test_log.append(entry)
-            st.success("Test logged — see the 🗂️ Test Log & Export tab.")
-
-    # -------------------------------------------------------------
-    # CT / WIRING SANITY CHECKS
-    # -------------------------------------------------------------
-    st.markdown("---")
-    st.subheader("🔍 System Health & Wiring Sanity Checks")
-
-    hc1, hc2 = st.columns(2)
-
-    with hc1:
-        ratio_mismatch_pct = abs(relay.effective_ratio_N - relay.effective_ratio_T) / max(relay.effective_ratio_N, relay.effective_ratio_T) * 100.0
-        if ratio_mismatch_pct > 5.0:
-            st.warning(
-                f"⚠️ **CT Ratio Mismatch:** Neutral and Terminal CT turns ratios differ by "
-                f"**{ratio_mismatch_pct:.1f}%**. This alone will produce a false differential "
-                f"current even under perfectly healthy load — verify CT nameplates and wiring "
-                f"before trusting any trip/no-trip result."
-            )
-        else:
-            st.success(f"✅ CT Ratio Match OK (Neutral vs Terminal turns ratio differ by {ratio_mismatch_pct:.1f}%)")
-
-    with hc2:
-        mags = [evals[p]["i_N_pu_mag"] for p in phases]
-        avg_mag = sum(mags) / len(mags) if mags else 0.0
-        max_dev_pct = (max(abs(m - avg_mag) for m in mags) / avg_mag * 100.0) if avg_mag > 0 else 0.0
-        if max_dev_pct > 15.0:
-            st.warning(
-                f"⚠️ **Phase Current Unbalance:** Neutral-side currents across A/B/C differ by "
-                f"up to **{max_dev_pct:.1f}%** from their average. Expected during a real "
-                f"unbalanced fault, but worth double-checking for a CT/wiring problem if this "
-                f"wasn't the intended test condition."
-            )
-        else:
-            st.success(f"✅ Phase Balance OK (Neutral-side currents within {max_dev_pct:.1f}% of each other)")
 
     # INTERACTIVE PLOTLY GRAPHIC
-    st.subheader("📈 Dual-Slope Characteristic Trip Curve Visualization")
+    st.subheader("📈 Restraint Characteristic Trip Curve Visualization")
 
-    max_x_val = max(6.0, max(e["i_rest_pu"] for e in evals.values()) + 1.5)
+    has_unrestrained_element = relay.i_unrestrained < 1e5
+    extra_range = (relay.break_2 + 1.0) if current_mode == "GENERATOR" else 0.0
+    max_x_val = max(6.0, max(e["i_rest_pu"] for e in evals.values()) + 1.5, extra_range)
     x_axis_line = np.linspace(0, max_x_val, 400)
     y_axis_line = [relay.calculate_trip_threshold(x) for x in x_axis_line]
 
@@ -595,12 +505,11 @@ with tab1:
     ))
 
     # High-set boundary — only meaningful when this relay actually has an unrestrained
-    # element. GENERATOR_LEGACY has i_unrestrained forced to 1e6 (unreachable) because
-    # this hardware has no such setting, so skip drawing/scaling around it.
+    # element enabled and confirmed by the user.
     if has_unrestrained_element:
         fig.add_trace(go.Scatter(
             x=[0, max_x_val], y=[relay.i_unrestrained, relay.i_unrestrained],
-            mode='lines', name='Unrestrained High-Set (87U)',
+            mode='lines', name='Unrestrained High-Set',
             line=dict(color='#DC2626', width=2, dash='dash')
         ))
 
@@ -619,7 +528,7 @@ with tab1:
     # Plot styling
     y_upper = max(relay.i_unrestrained + 2.0, max(y_axis_line) + 1.0) if has_unrestrained_element else max(y_axis_line) + 1.0
     fig.update_layout(
-        title=f"{'Single-Slope' if relay.mode == 'GENERATOR_LEGACY' else 'Dual-Slope'} Restraint Plot ({relay.mode})",
+        title=f"{'GE G60 Dual-Breakpoint' if relay.mode == 'GENERATOR' else 'Single-Slope'} Restraint Plot ({relay.mode})",
         xaxis_title="Restraint Current I_rest (pu)",
         yaxis_title="Operating Current I_op (pu)",
         xaxis=dict(range=[0, max_x_val]),
@@ -674,7 +583,10 @@ with tab2:
     with sw1:
         sweep_start = st.number_input("Sweep Start (pu)", value=0.2, min_value=0.0, step=0.1)
     with sw2:
-        default_end = float(relay.i_unrestrained) if relay.i_unrestrained < 1e5 else 6.0
+        if current_mode == "GENERATOR":
+            default_end = float(relay.break_2) + 2.0
+        else:
+            default_end = float(relay.i_unrestrained) if relay.i_unrestrained < 1e5 else 6.0
         sweep_end = st.number_input("Sweep End (pu)", value=max(6.0, default_end), step=0.5)
     with sw3:
         sweep_step = st.number_input("Sweep Step (pu)", value=0.5, min_value=0.1, step=0.1)
@@ -706,28 +618,3 @@ with tab2:
             file_name=f"87G_Sweep_Test_Table_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.csv",
             mime="text/csv"
         )
-
-
-# TEST LOG & EXPORT TAB
-with tab3:
-    st.subheader("🗂️ Test Log & Shift Report Export")
-    st.write("Every test you click **📌 Log This Test** for (in the Live Vector Simulation tab) is collected here for the shift.")
-
-    if len(st.session_state.test_log) == 0:
-        st.info("No tests logged yet. Go to the 📊 Live Vector Simulation tab, run a test, and click '📌 Log This Test'.")
-    else:
-        log_df = pd.DataFrame(st.session_state.test_log)
-        st.dataframe(log_df, use_container_width=True)
-
-        csv_bytes = log_df.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            label="⬇️ Download Test Log as CSV",
-            data=csv_bytes,
-            file_name=f"87G_Test_Log_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-            mime="text/csv"
-        )
-
-        st.markdown("---")
-        if st.button("🗑️ Clear Test Log"):
-            st.session_state.test_log = []
-            st.rerun()
