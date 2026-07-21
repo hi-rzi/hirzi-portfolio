@@ -255,6 +255,47 @@ def generate_pdf_report(unit_name, relay_obj, evals, phases):
 # =====================================================================
 # 3. STREAMLIT WEB APP MAIN PANEL & SYSTEM MENU
 # =====================================================================
+# =====================================================================
+# 2b. SLIDER + EXACT-VALUE INPUT HELPER
+#     Every protection setting below is shown as a slider (for quick exploration) paired
+#     with a plain number box (for typing the exact value from a setting sheet). The two
+#     stay in sync in both directions.
+# =====================================================================
+def slider_with_exact_input(container, label, min_v, max_v, default, step, key, help_text=None):
+    slider_key = f"{key}__slider"
+    number_key = f"{key}__number"
+
+    if key not in st.session_state:
+        st.session_state[key] = default
+        st.session_state[slider_key] = default
+        st.session_state[number_key] = default
+
+    def _on_slider_change():
+        v = st.session_state[slider_key]
+        st.session_state[key] = v
+        st.session_state[number_key] = v
+
+    def _on_number_change():
+        v = st.session_state[number_key]
+        v = min(max(v, min_v), max_v)  # clamp to the valid manual range
+        st.session_state[key] = v
+        st.session_state[slider_key] = v
+
+    col_s, col_n = container.columns([2.4, 1])
+    with col_s:
+        st.slider(
+            label, min_value=min_v, max_value=max_v, value=st.session_state[key],
+            step=step, key=slider_key, on_change=_on_slider_change, help=help_text
+        )
+    with col_n:
+        st.number_input(
+            "Exact", min_value=min_v, max_value=max_v, value=st.session_state[key],
+            step=step, key=number_key, on_change=_on_number_change, label_visibility="collapsed"
+        )
+
+    return st.session_state[key]
+
+
 st.set_page_config(page_title="Generator Differential Relay Suite", layout="wide")
 
 st.title("⚡ Enterprise Generator Differential Protection (87G) Suite")
@@ -281,8 +322,8 @@ PRESETS = {
         #   Pickup: 0.050-1.00 pu (step 0.01) | Slope1/Slope2: 1-100% (step 1)
         #   Break1: 1.00-1.50 pu (step 0.01) | Break2: 1.50-30.00 pu (step 0.01)
         #   Operate time: <3/4 cycle when I_diff > 5x Pickup (speed spec, not modeled numerically)
-        "Gen Unit 7 - 846 MVA": {"mva": 846.231, "kv": 23.0, "ct_n": 20000, "ct_t": 20000, "pickup": 0.10, "s1": 15, "break_1": 1.10, "s2": 60, "break_2": 6.00},
-        "Gen Unit 8 - 846 MVA": {"mva": 846.231, "kv": 23.0, "ct_n": 20000, "ct_t": 20000, "pickup": 0.10, "s1": 15, "break_1": 1.10, "s2": 60, "break_2": 6.00}
+        "POMI Unit 7 - 846 MVA": {"mva": 846.231, "kv": 23.0, "ct_n": 24000, "ct_t": 24000, "pickup": 0.10, "s1": 15, "break_1": 1.10, "s2": 60, "break_2": 6.00},
+        "POMI Unit 8 - 846 MVA": {"mva": 846.231, "kv": 23.0, "ct_n": 24000, "ct_t": 24000, "pickup": 0.10, "s1": 15, "break_1": 1.10, "s2": 60, "break_2": 6.00}
     },
     "GENERATOR_LEGACY": {
         # Real Paiton Units 7 & 8 generator differential data, from setting sheet
@@ -297,8 +338,8 @@ PRESETS = {
         # saturates, which INCREASES the effective margin beyond the flat 10% line (see
         # Figure 7) — that extra margin is not modeled here since it's shown only as a curve,
         # not a formula, in the manual.
-        "Paiton Unit 7 - CFD22B4A (846 MVA)": {"mva": 846.231, "kv": 23.0, "ct_n": 24000, "ct_t": 24000, "target_amps": 0.2, "s1": 10},
-        "Paiton Unit 8 - CFD22B4A (846 MVA)": {"mva": 846.231, "kv": 23.0, "ct_n": 24000, "ct_t": 24000, "target_amps": 0.2, "s1": 10}
+        "POMI Unit 7 - 846 MVA": {"mva": 846.231, "kv": 23.0, "ct_n": 24000, "ct_t": 24000, "target_amps": 0.2, "s1": 10},
+        "POMI Unit 8 - 846 MVA": {"mva": 846.231, "kv": 23.0, "ct_n": 24000, "ct_t": 24000, "target_amps": 0.2, "s1": 10}
     }
 }
 
@@ -338,44 +379,51 @@ if current_mode == "GENERATOR_LEGACY":
         "setting — the pickup. Everything else is fixed by the relay's internal "
         "product-restraint design, not adjustable on site."
     )
-    target_amps = st.sidebar.slider(
-        "Target / Seal-in Pickup (Secondary Amps)", 0.1, 1.0, p_data["target_amps"], 0.05,
-        help="Factory default is 0.2 A. Per GEK-34124E, it is NOT recommended to set below "
-             "0.1 A, and the rear contact may need up to ~0.25 A to close — verify the actual "
-             "closing current during commissioning."
+    target_amps = slider_with_exact_input(
+        st.sidebar, "Target / Seal-in Pickup (Secondary Amps)", 0.1, 1.0, p_data["target_amps"], 0.05,
+        key=f"{current_mode}__{selected_preset}__target_amps",
+        help_text="Factory default is 0.2 A. Per GEK-34124E, it is NOT recommended to set below "
+                   "0.1 A, and the rear contact may need up to ~0.25 A to close — verify the actual "
+                   "closing current during commissioning."
     )
-    slope_1 = st.sidebar.slider(
-        "Restraint Slope (%)", 5, 30, p_data["s1"], 1,
-        help="Confirmed by GEK-34124E's Principles of Operation: this relay balances when "
-             "the differential current is 10% of the SMALLER of the two terminal currents, "
-             "up to approximately rated current. This is fixed by the relay's internal "
-             "design, not a field setting — the slider exists here only to explore 'what if' "
-             "sensitivity; leave at 10% to match the actual hardware."
+    slope_1 = slider_with_exact_input(
+        st.sidebar, "Restraint Slope (%)", 5, 30, p_data["s1"], 1,
+        key=f"{current_mode}__{selected_preset}__slope1",
+        help_text="Confirmed by GEK-34124E's Principles of Operation: this relay balances when "
+                   "the differential current is 10% of the SMALLER of the two terminal currents, "
+                   "up to approximately rated current. This is fixed by the relay's internal "
+                   "design, not a field setting — the slider exists here only to explore 'what if' "
+                   "sensitivity; leave at 10% to match the actual hardware."
     )
     i_pickup = 0.0  # overridden inside the relay class from target_amps for this mode
     slope_2 = slope_1
     break_1, break_2 = 1e6, 1e6  # unused in legacy formula
 
 else:  # GENERATOR - GE G60, ranges/steps per instruction manual
-    i_pickup = st.sidebar.slider(
-        "Pickup (pu)", min_value=0.05, max_value=1.00, value=p_data["pickup"], step=0.01,
-        help="G60 manual range: 0.050 to 1.00 pu, step 0.01"
+    i_pickup = slider_with_exact_input(
+        st.sidebar, "Pickup (pu)", 0.05, 1.00, p_data["pickup"], 0.01,
+        key=f"{current_mode}__{selected_preset}__pickup",
+        help_text="G60 manual range: 0.050 to 1.00 pu, step 0.01"
     )
-    slope_1 = st.sidebar.slider(
-        "Slope 1 (%)", min_value=1, max_value=100, value=p_data["s1"], step=1,
-        help="G60 manual range: 1 to 100%, step 1"
+    slope_1 = slider_with_exact_input(
+        st.sidebar, "Slope 1 (%)", 1, 100, p_data["s1"], 1,
+        key=f"{current_mode}__{selected_preset}__slope1",
+        help_text="G60 manual range: 1 to 100%, step 1"
     )
-    break_1 = st.sidebar.slider(
-        "Break 1 (pu)", min_value=1.00, max_value=1.50, value=p_data["break_1"], step=0.01,
-        help="G60 manual range: 1.00 to 1.50 pu, step 0.01. Restraint stays flat at Pickup below this point."
+    break_1 = slider_with_exact_input(
+        st.sidebar, "Break 1 (pu)", 1.00, 1.50, p_data["break_1"], 0.01,
+        key=f"{current_mode}__{selected_preset}__break1",
+        help_text="G60 manual range: 1.00 to 1.50 pu, step 0.01. Restraint stays flat at Pickup below this point."
     )
-    slope_2 = st.sidebar.slider(
-        "Slope 2 (%)", min_value=1, max_value=100, value=p_data["s2"], step=1,
-        help="G60 manual range: 1 to 100%, step 1"
+    slope_2 = slider_with_exact_input(
+        st.sidebar, "Slope 2 (%)", 1, 100, p_data["s2"], 1,
+        key=f"{current_mode}__{selected_preset}__slope2",
+        help_text="G60 manual range: 1 to 100%, step 1"
     )
-    break_2 = st.sidebar.slider(
-        "Break 2 (pu)", min_value=1.50, max_value=30.00, value=p_data["break_2"], step=0.01,
-        help="G60 manual range: 1.50 to 30.00 pu, step 0.01. Slope 2 applies above this point."
+    break_2 = slider_with_exact_input(
+        st.sidebar, "Break 2 (pu)", 1.50, 30.00, p_data["break_2"], 0.01,
+        key=f"{current_mode}__{selected_preset}__break2",
+        help_text="G60 manual range: 1.50 to 30.00 pu, step 0.01. Slope 2 applies above this point."
     )
 
     st.sidebar.caption(
@@ -391,7 +439,10 @@ else:  # GENERATOR - GE G60, ranges/steps per instruction manual
              "differential element with its own pickup setting. Left unconfirmed by default."
     )
     if enable_unrestrained:
-        i_unrestrained_value = st.sidebar.slider("Unrestrained High-Set Pickup (pu)", 3.0, 30.0, 8.0, 0.5)
+        i_unrestrained_value = slider_with_exact_input(
+            st.sidebar, "Unrestrained High-Set Pickup (pu)", 3.0, 30.0, 8.0, 0.5,
+            key=f"{current_mode}__{selected_preset}__unrestrained"
+        )
 
 st.sidebar.header("3. Wiring & Convention")
 if current_mode == "GENERATOR_LEGACY":
