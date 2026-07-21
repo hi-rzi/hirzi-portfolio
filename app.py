@@ -318,16 +318,18 @@ else:
 # PRESET PROFILE MANAGEMENT
 PRESETS = {
     "GENERATOR": {
+        # IMPORTANT: unlike the CFD22B4A preset below, NO actual G60 setting sheet has ever
+        # been provided for this unit — only the CT ratio (24000:5) is confirmed, from the
+        # plant single-line diagram. Pickup/Slope1/Slope2/Break1/Break2 below are reasonable
+        # example values within the G60 manual's allowed ranges, NOT this plant's real
+        # commissioned settings. Do not use for actual verification until a real G60 setting
+        # file/report is obtained and these values are corrected against it.
         # Setting ranges/steps per GE G60 instruction manual:
         #   Pickup: 0.050-1.00 pu (step 0.01) | Slope1/Slope2: 1-100% (step 1)
         #   Break1: 1.00-1.50 pu (step 0.01) | Break2: 1.50-30.00 pu (step 0.01)
         #   Operate time: <3/4 cycle when I_diff > 5x Pickup (speed spec, not modeled numerically)
-        # CT ratio 24000:5 confirmed from the plant single-line diagram (87G7 zone): both the
-        # Terminal-side CT (above the generator, toward the bus) and the Neutral-side CT
-        # (below the generator, toward the neutral grounding transformer) are 24000/5 — the
-        # same physical CTs as the legacy CFD22B4A preset below.
-        "POMI Unit 7 - 846 MVA": {"mva": 846.231, "kv": 23.0, "ct_n": 24000, "ct_t": 24000, "pickup": 0.10, "s1": 15, "break_1": 1.10, "s2": 60, "break_2": 6.00},
-        "POMI Unit 8 - 846 MVA": {"mva": 846.231, "kv": 23.0, "ct_n": 24000, "ct_t": 24000, "pickup": 0.10, "s1": 15, "break_1": 1.10, "s2": 60, "break_2": 6.00}
+        "Gen Unit 7 - 846 MVA (EXAMPLE, not commissioned)": {"mva": 846.231, "kv": 23.0, "ct_n": 24000, "ct_t": 24000, "pickup": 0.10, "s1": 15, "break_1": 1.10, "s2": 60, "break_2": 6.00},
+        "Gen Unit 8 - 846 MVA (EXAMPLE, not commissioned)": {"mva": 846.231, "kv": 23.0, "ct_n": 24000, "ct_t": 24000, "pickup": 0.10, "s1": 15, "break_1": 1.10, "s2": 60, "break_2": 6.00}
     },
     "GENERATOR_LEGACY": {
         # Real Paiton Units 7 & 8 generator differential data, from setting sheet
@@ -342,8 +344,8 @@ PRESETS = {
         # saturates, which INCREASES the effective margin beyond the flat 10% line (see
         # Figure 7) — that extra margin is not modeled here since it's shown only as a curve,
         # not a formula, in the manual.
-        "POMI Unit 7 - 846 MVA": {"mva": 846.231, "kv": 23.0, "ct_n": 24000, "ct_t": 24000, "target_amps": 0.2, "s1": 10},
-        "POMI Unit 8 - 846 MVA": {"mva": 846.231, "kv": 23.0, "ct_n": 24000, "ct_t": 24000, "target_amps": 0.2, "s1": 10}
+        "Paiton Unit 7 - CFD22B4A (846 MVA)": {"mva": 846.231, "kv": 23.0, "ct_n": 24000, "ct_t": 24000, "target_amps": 0.2, "s1": 10},
+        "Paiton Unit 8 - CFD22B4A (846 MVA)": {"mva": 846.231, "kv": 23.0, "ct_n": 24000, "ct_t": 24000, "target_amps": 0.2, "s1": 10}
     }
 }
 
@@ -404,6 +406,13 @@ if current_mode == "GENERATOR_LEGACY":
     break_1, break_2 = 1e6, 1e6  # unused in legacy formula
 
 else:  # GENERATOR - GE G60, ranges/steps per instruction manual
+    st.sidebar.warning(
+        "⚠️ No actual G60 setting sheet has been provided for this unit yet — only the CT "
+        "ratio (24000:5) is confirmed from the plant single-line diagram. The values below "
+        "are example settings within the manual's allowed ranges, not this plant's real "
+        "commissioned settings. Don't rely on this for actual verification until a real "
+        "G60 setting file is obtained."
+    )
     i_pickup = slider_with_exact_input(
         st.sidebar, "Pickup (pu)", 0.05, 1.00, p_data["pickup"], 0.01,
         key=f"{current_mode}__{selected_preset}__pickup",
