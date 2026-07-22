@@ -30,16 +30,16 @@
   They're darkened a lot on purpose — meant to be felt as atmosphere, not read
   as a photo.
 -->
-<div class="life-bg is-active" data-sections="about,experience" style="background-image:url('life-bg-1.jpeg');"></div>
-<div class="life-bg" data-sections="education,skills,certifications" style="background-image:url('life-bg-2.jpeg');"></div>
-<div class="life-bg" data-sections="organizations,sports" style="background-image:url('life-bg-3.jpeg');"></div>
-<div class="life-bg" data-sections="projects" style="background-image:url('life-bg-4.jpeg');"></div>
-<div class="life-bg" data-sections="contact" style="background-image:url('life-bg-5.jpeg');"></div>
+<div class="life-bg is-active" data-sections="about,experience" style="background-image:url('life-bg-1.jpg');"></div>
+<div class="life-bg" data-sections="education,skills,certifications" style="background-image:url('life-bg-2.jpg');"></div>
+<div class="life-bg" data-sections="organizations,sports" style="background-image:url('life-bg-3.jpg');"></div>
+<div class="life-bg" data-sections="projects" style="background-image:url('life-bg-4.jpg');"></div>
+<div class="life-bg" data-sections="contact" style="background-image:url('life-bg-5.jpg');"></div>
 <div class="life-bg-overlay"></div>
 
 <nav class="nav" aria-label="Primary">
   <div class="wrap">
-    <span class="brand">Hirzi Hidayat</span>
+    <span class="brand">Hirzi Hidayat // EEE Student</span>
     <button class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="navList" aria-label="Toggle navigation menu">
       <span></span><span></span><span></span>
     </button>
@@ -62,10 +62,10 @@
   <header class="hero wrap">
     <p class="eyebrow">Electrical &amp; Electronic Engineering Student </p>
     <h1>Hirzi Fakhru Dzaki Hidayat</h1>
-    <p class="tagline">2nd year MEng (Hons) Electrical and Electronic Engineering student at the University of Nottingham Malaysia, currently inside a 615 MW coal-fired plant in East Java learning how generators, transformers, and switchgear actually work.</p>
+    <p class="tagline">Penultimate year MEng (Hons) Electrical and Electronic Engineering student at the University of Nottingham Malaysia, currently inside a 615 MW coal-fired plant in East Java learning how generators, transformers, and switchgear actually work.</p>
 
     <div class="sld" aria-hidden="false">
-      <svg viewBox="0 0 1100 200" role="img" aria-label="Single-line diagram used as site navigation: Generator, Breaker, Bus, feeding nine labeled sections. The breaker is clickable to toggle current flow.">
+      <svg viewBox="0 0 1300 200" role="img" aria-label="Single-line diagram used as site navigation: Generator, Breaker, Transformer, Bus, feeding nine labeled sections into a terminating load. The breaker is clickable to toggle current flow.">
         <!-- Generator -->
         <circle class="sld-node-circle" cx="70" cy="60" r="26"/>
         <text x="70" y="66" class="sld-label" style="font-weight:600;">G</text>
@@ -81,58 +81,71 @@
         </g>
         <text x="171" y="104" class="sld-caption">GCB</text>
         <text x="171" y="117" class="sld-hint">(click me)</text>
-        <line class="sld-line power-line current-flow" x1="192" y1="60" x2="250" y2="60"/>
+        <line class="sld-line power-line current-flow" x1="192" y1="60" x2="218" y2="60"/>
+
+        <!-- Step-up transformer -->
+        <circle class="sld-node-circle" cx="233" cy="60" r="14"/>
+        <circle class="sld-node-circle" cx="253" cy="60" r="14"/>
+        <text x="243" y="104" class="sld-caption">XFMR</text>
+        <line class="sld-line power-line current-flow" x1="267" y1="60" x2="300" y2="60"/>
 
         <!-- vertical riser to bus -->
-        <line class="sld-bus power-line current-flow" x1="250" y1="60" x2="250" y2="26"/>
-        <line class="sld-bus power-line current-flow" x1="250" y1="26" x2="1060" y2="26"/>
-        <text x="250" y="14" class="sld-caption" text-anchor="start">BUS</text>
+        <line class="sld-bus power-line current-flow" x1="300" y1="60" x2="300" y2="26"/>
+        <line class="sld-bus power-line current-flow" x1="300" y1="26" x2="1240" y2="26"/>
+        <text x="300" y="14" class="sld-caption" text-anchor="start">BUS</text>
 
        <!-- Feeders — order matches the actual page/section order (About -> Contact) -->
         <g class="feeder-group" data-target="#about" tabindex="0" role="link" aria-label="Go to About section">
-          <line class="sld-line" x1="331" y1="26" x2="331" y2="150"/>
-          <line class="sld-line" x1="317" y1="150" x2="345" y2="150" transform="rotate(-30 331 150)"/>
-          <text x="331" y="178" class="sld-label">ABOUT</text>
+          <line class="sld-line" x1="390" y1="26" x2="390" y2="150"/>
+          <line class="sld-line" x1="376" y1="150" x2="404" y2="150" transform="rotate(-30 390 150)"/>
+          <text x="390" y="178" class="sld-label">ABOUT</text>
         </g>
         <g class="feeder-group" data-target="#experience" tabindex="0" role="link" aria-label="Go to Experience section">
-          <line class="sld-line" x1="412" y1="26" x2="412" y2="150"/>
-          <line class="sld-line" x1="398" y1="150" x2="426" y2="150" transform="rotate(-30 412 150)"/>
-          <text x="412" y="178" class="sld-label">EXPERIENCE</text>
+          <line class="sld-line" x1="485" y1="26" x2="485" y2="150"/>
+          <line class="sld-line" x1="471" y1="150" x2="499" y2="150" transform="rotate(-30 485 150)"/>
+          <text x="485" y="178" class="sld-label">EXPERIENCE</text>
         </g>
         <g class="feeder-group" data-target="#projects" tabindex="0" role="link" aria-label="Go to Projects section">
-          <line class="sld-line" x1="493" y1="26" x2="493" y2="150"/>
-          <line class="sld-line" x1="479" y1="150" x2="507" y2="150" transform="rotate(-30 493 150)"/>
-          <text x="493" y="178" class="sld-label">PROJECTS</text>
+          <line class="sld-line" x1="580" y1="26" x2="580" y2="150"/>
+          <line class="sld-line" x1="566" y1="150" x2="594" y2="150" transform="rotate(-30 580 150)"/>
+          <text x="580" y="178" class="sld-label">PROJECTS</text>
         </g>
         <g class="feeder-group" data-target="#education" tabindex="0" role="link" aria-label="Go to Education section">
-          <line class="sld-line" x1="574" y1="26" x2="574" y2="150"/>
-          <line class="sld-line" x1="560" y1="150" x2="588" y2="150" transform="rotate(-30 574 150)"/>
-          <text x="574" y="178" class="sld-label">EDUCATION</text>
+          <line class="sld-line" x1="675" y1="26" x2="675" y2="150"/>
+          <line class="sld-line" x1="661" y1="150" x2="689" y2="150" transform="rotate(-30 675 150)"/>
+          <text x="675" y="178" class="sld-label">EDUCATION</text>
         </g>
         <g class="feeder-group" data-target="#skills" tabindex="0" role="link" aria-label="Go to Skills section">
-          <line class="sld-line" x1="655" y1="26" x2="655" y2="150"/>
-          <line class="sld-line" x1="641" y1="150" x2="669" y2="150" transform="rotate(-30 655 150)"/>
-          <text x="655" y="178" class="sld-label">SKILLS</text>
+          <line class="sld-line" x1="770" y1="26" x2="770" y2="150"/>
+          <line class="sld-line" x1="756" y1="150" x2="784" y2="150" transform="rotate(-30 770 150)"/>
+          <text x="770" y="178" class="sld-label">SKILLS</text>
         </g>
         <g class="feeder-group" data-target="#certifications" tabindex="0" role="link" aria-label="Go to Certifications section">
-          <line class="sld-line" x1="736" y1="26" x2="736" y2="150"/>
-          <line class="sld-line" x1="722" y1="150" x2="750" y2="150" transform="rotate(-30 736 150)"/>
-          <text x="736" y="178" class="sld-label">CERTIFICATIONS</text>
+          <line class="sld-line" x1="865" y1="26" x2="865" y2="150"/>
+          <line class="sld-line" x1="851" y1="150" x2="879" y2="150" transform="rotate(-30 865 150)"/>
+          <text x="865" y="178" class="sld-label">CERTIFICATIONS</text>
         </g>
         <g class="feeder-group" data-target="#organizations" tabindex="0" role="link" aria-label="Go to Organizations section">
-          <line class="sld-line" x1="817" y1="26" x2="817" y2="150"/>
-          <line class="sld-line" x1="803" y1="150" x2="831" y2="150" transform="rotate(-30 817 150)"/>
-          <text x="817" y="178" class="sld-label">ORGANIZATIONS</text>
+          <line class="sld-line" x1="960" y1="26" x2="960" y2="150"/>
+          <line class="sld-line" x1="946" y1="150" x2="974" y2="150" transform="rotate(-30 960 150)"/>
+          <text x="960" y="178" class="sld-label">ORGANIZATIONS</text>
         </g>
         <g class="feeder-group" data-target="#sports" tabindex="0" role="link" aria-label="Go to Sports section">
-          <line class="sld-line" x1="898" y1="26" x2="898" y2="150"/>
-          <line class="sld-line" x1="884" y1="150" x2="912" y2="150" transform="rotate(-30 898 150)"/>
-          <text x="898" y="178" class="sld-label">SPORTS</text>
+          <line class="sld-line" x1="1055" y1="26" x2="1055" y2="150"/>
+          <line class="sld-line" x1="1041" y1="150" x2="1069" y2="150" transform="rotate(-30 1055 150)"/>
+          <text x="1055" y="178" class="sld-label">SPORTS</text>
         </g>
         <g class="feeder-group" data-target="#contact" tabindex="0" role="link" aria-label="Go to Contact section">
-          <line class="sld-line" x1="979" y1="26" x2="979" y2="150"/>
-          <line class="sld-line" x1="965" y1="150" x2="993" y2="150" transform="rotate(-30 979 150)"/>
-          <text x="979" y="178" class="sld-label">CONTACT</text>
+          <line class="sld-line" x1="1150" y1="26" x2="1150" y2="150"/>
+          <line class="sld-line" x1="1136" y1="150" x2="1164" y2="150" transform="rotate(-30 1150 150)"/>
+          <text x="1150" y="178" class="sld-label">CONTACT</text>
+        </g>
+
+        <!-- Terminating load at the end of the bus -->
+        <g aria-hidden="true">
+          <line class="sld-line power-line current-flow" x1="1240" y1="26" x2="1240" y2="120"/>
+          <path d="M 1226 120 L 1254 120 L 1240 140 Z" fill="var(--ink-soft)"/>
+          <text x="1240" y="160" class="sld-caption">LOAD</text>
         </g>
       </svg>
     </div>
@@ -320,7 +333,7 @@
       <div class="section-head"><span class="section-tag">06</span><h2>Certifications</h2></div>
       <div class="cert-grid">
         <div class="cert-card reveal">
-          <img src="kicad-certificate.png" alt="Udemy certificate of completion for PCB Design in KiCad" loading="lazy" class="cert-image"/>
+          <img src="kicad-certificate.jpg" alt="Udemy certificate of completion for PCB Design in KiCad" loading="lazy" class="cert-image"/>
           <div class="cert-body">
             <span class="cert-tag">CERT // 01</span>
             <h3>PCB Design in KiCad</h3>
