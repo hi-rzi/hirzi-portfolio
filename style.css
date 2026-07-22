@@ -178,13 +178,17 @@
   }
 
   /* ---------- Experience ---------- */
-  .exp-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:20px; }
-  .exp-card{ background:var(--card-bg); border:1px solid var(--paper-line); border-radius:14px; padding:22px; display:flex; flex-direction:column; gap:10px; }
+  .exp-grid{ display:block; }
+  .exp-card{ background:var(--card-bg); border:1px solid var(--paper-line); border-radius:14px; padding:26px 26px 24px; display:flex; flex-direction:column; gap:10px; }
   .exp-card .num{ font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--amber); font-weight:600; }
   .exp-card h3{ font-size:19px; font-weight:600; }
-  .exp-card p{ font-size:14px; color:var(--ink-soft); margin:0; }
+  .exp-card p{ font-size:14px; color:var(--ink-soft); margin:0; max-width:70ch; }
+  .exp-subhead{
+    font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--ink-soft); margin-top:14px; padding-top:14px; border-top:1px dashed var(--paper-line);
+  }
   .exp-tags{ display:flex; flex-wrap:wrap; gap:6px; margin-top:4px; }
-  .relay-row{ display:grid; grid-template-columns:repeat(auto-fit, minmax(190px,1fr)); gap:14px; margin-bottom:14px; }
+  .relay-row{ display:grid; grid-template-columns:repeat(auto-fit, minmax(190px,1fr)); gap:14px; margin-top:10px; }
   .relay-card{
     background:var(--card-bg); border:1px solid var(--paper-line); border-radius:12px; padding:16px 18px;
   }
