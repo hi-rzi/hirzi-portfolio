@@ -318,18 +318,19 @@ else:
 # PRESET PROFILE MANAGEMENT
 PRESETS = {
     "GENERATOR": {
-        # IMPORTANT: unlike the CFD22B4A preset below, NO actual G60 setting sheet has ever
-        # been provided for this unit — only the CT ratio (24000:5) is confirmed, from the
-        # plant single-line diagram. Pickup/Slope1/Slope2/Break1/Break2 below are reasonable
-        # example values within the G60 manual's allowed ranges, NOT this plant's real
-        # commissioned settings. Do not use for actual verification until a real G60 setting
-        # file/report is obtained and these values are corrected against it.
+        # Confirmed from real G60 setting sheet, Section "3.2 [87G] GENERATOR DIFFERENTIAL":
+        #   Percent Diff. Pick Up: 0.06 pu | Percent Diff. Slope 1: 20%
+        #   Percent Diff. Break 1: 1.15 pu | Percent Diff. Slope 2: 80% | Percent Diff. Break 2: 8 pu
+        #   Line End Source: OUTG. SRC1 (Terminal side) / NETG. SRC2 (Neutral side)
+        #   Percent Diff. Block: Off — no separate unrestrained/high-set element mentioned,
+        #   so that stays disabled by default until confirmed otherwise.
+        # CT ratio 24000:5 confirmed separately from the plant single-line diagram (87G7 zone).
         # Setting ranges/steps per GE G60 instruction manual:
         #   Pickup: 0.050-1.00 pu (step 0.01) | Slope1/Slope2: 1-100% (step 1)
         #   Break1: 1.00-1.50 pu (step 0.01) | Break2: 1.50-30.00 pu (step 0.01)
         #   Operate time: <3/4 cycle when I_diff > 5x Pickup (speed spec, not modeled numerically)
-        "Gen Unit 7 - 846 MVA (EXAMPLE, not commissioned)": {"mva": 846.231, "kv": 23.0, "ct_n": 24000, "ct_t": 24000, "pickup": 0.10, "s1": 15, "break_1": 1.10, "s2": 60, "break_2": 6.00},
-        "Gen Unit 8 - 846 MVA (EXAMPLE, not commissioned)": {"mva": 846.231, "kv": 23.0, "ct_n": 24000, "ct_t": 24000, "pickup": 0.10, "s1": 15, "break_1": 1.10, "s2": 60, "break_2": 6.00}
+        "Gen Unit 7 - 846 MVA (G60, confirmed)": {"mva": 846.231, "kv": 23.0, "ct_n": 24000, "ct_t": 24000, "pickup": 0.06, "s1": 20, "break_1": 1.15, "s2": 80, "break_2": 8.00},
+        "Gen Unit 8 - 846 MVA (G60, confirmed)": {"mva": 846.231, "kv": 23.0, "ct_n": 24000, "ct_t": 24000, "pickup": 0.06, "s1": 20, "break_1": 1.15, "s2": 80, "break_2": 8.00}
     },
     "GENERATOR_LEGACY": {
         # Real Paiton Units 7 & 8 generator differential data, from setting sheet
@@ -406,12 +407,11 @@ if current_mode == "GENERATOR_LEGACY":
     break_1, break_2 = 1e6, 1e6  # unused in legacy formula
 
 else:  # GENERATOR - GE G60, ranges/steps per instruction manual
-    st.sidebar.warning(
-        "⚠️ No actual G60 setting sheet has been provided for this unit yet — only the CT "
-        "ratio (24000:5) is confirmed from the plant single-line diagram. The values below "
-        "are example settings within the manual's allowed ranges, not this plant's real "
-        "commissioned settings. Don't rely on this for actual verification until a real "
-        "G60 setting file is obtained."
+    st.sidebar.success(
+        "✅ Pickup, Slope 1/2, and Break 1/2 below are confirmed from the actual G60 setting "
+        "sheet, Section 3.2 [87G] Generator Differential. CT ratio confirmed from the plant "
+        "single-line diagram. No separate unrestrained/high-set element was listed on that "
+        "sheet, so it stays disabled below unless you confirm otherwise."
     )
     i_pickup = slider_with_exact_input(
         st.sidebar, "Pickup (pu)", 0.05, 1.00, p_data["pickup"], 0.01,
